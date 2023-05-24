@@ -9,7 +9,12 @@ updated May 24 2023
 
 using BSplines, Plots, LinearAlgebra, CSV, DataFrames
 
-# list of material constants
+
+#=
+
+Material Constants
+
+=#
 B = 0.1
 k = 5
 p = 3.2
@@ -18,9 +23,14 @@ ryarn = 0.1
 stitchlength = 12
 targetlength = stitchlength/2
 
+# this is the penalty for the length constraint
 penalty = 10
 
+#=
 
+Import the initial configuration
+
+=#
 # make the b spline basis st the order is 5 and it has C3 continuity
 # the second argument determines the range of t
 # ALL THE SPLINES HAVE THE SAME BASIS
@@ -34,7 +44,12 @@ spl = approximate() # okay so I can't get this to work rn so maybe just import t
 # alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
 
 
-#math functions
+
+#=
+
+Math Functions
+
+=#
 function distance(pt1, pt2)
     d = ((pt1[1]-pt2[1])^2 + (pt1[2]-pt2[2])^2 + (pt1[3]-pt2[3])^2)^(1/2)
     return d
@@ -45,6 +60,11 @@ function norm(vec)
     return norm
 end
 
+#=
+
+Stitch Manipulation Functions
+
+=#
 
 # translation functions
 # INTPUT LIST IS THE X,Y,Z,T VECTOR
@@ -78,6 +98,13 @@ function righthalf(list)
     newlist = reverse(newlist) # invertes the new half so the final list moves sequentially along the stitch
     return newlist
 end
+
+
+#=
+
+Bending
+
+=#
 
 # function to calculate bending energy
 function bending(dcurve, ddcurve, dbasis, ddbasis, deltat)
@@ -165,6 +192,11 @@ function dEbenddPi(lista, deltat, tmin, tmax, dimension, knot)
     return dEbenddP
 end
 
+#=
+
+Compression
+
+=#
 # function to calculate force and energy densities from compression
 function floof(dist)
     outer_dia = 2*ryarn
@@ -529,6 +561,11 @@ function dEcompdPi(list, deltat, tmin, tmax, dimension, knot)
 
 end
 
+#=
+
+Length
+
+=#
 # gives length of left half
 function totallength(list, deltat, tmax)
     # list should be fordEbend
@@ -578,95 +615,63 @@ function dLdPi(list, deltat, tmin, tmax, dimension, knot, targetlength, currentl
     return dLdP, dLdPvalue
 end
 
-#need to rewrite
-function constructbasis3(basis, deltat, tmin, tmax)
+
+
+
+#=
+
+Generate the basis functions and their derivatives
+
+=#
+
+function constructbasis5(basis, deltat, tmin, tmax, d)
     # constructs list of basis values for all basis functions at all values of t
-    # order 3
-    # only has t 0:3 for five control points
+    # order 5
+    # only has t 0:5 for nine control points
     # it essentially just pads the output of the basis function so the indexing of the array is consistent
     units = 1/deltat
     basislist = []
     if tmin <= 0 && tmax >= 1
         for t in 0:(units-1)
-            autobasis = bsplines(basis, deltat*t)
-            push!(basislist,[autobasis[1], autobasis[2], autobasis[3], 0,0])
+            autobasis = bsplines(basis, deltat*t, Derivative(d))
+            push!(basislist,[autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0, 0, 0, 0])
         end
     end
     if tmin<=1 && tmax>=2
         for t in units:(2*units-1)
-            autobasis = bsplines(basis, deltat*t)
-            push!(basislist,[0,autobasis[2], autobasis[3], autobasis[4], 0])
+            autobasis = bsplines(basis, deltat*t, Derivative(d))
+            push!(basislist,[0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0, 0, 0])
         end
     end
     if tmin<=2 && tmax>=3
-        for t in 2*units:3*units
-            autobasis = bsplines(basis, deltat*t)
-            push!(basislist,[0,0,autobasis[3], autobasis[4], autobasis[5]])
+        for t in 2*units:(3*units-1)
+            autobasis = bsplines(basis, deltat*t, Derivative(d))
+            push!(basislist,[0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0, 0])
         end
     end
-    
+    if tmin<=3 && tmax>=4
+        for t in 3*units:(4*units-1)
+            autobasis = bsplines(basis, deltat*t, Derivative(d))
+            push!(basislist,[0, 0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0])
+        end
+    end
+    if tmin<=4 && tmax>=5
+        for t in 4*units:5*units
+            autobasis = bsplines(basis, deltat*t, Derivative(d))
+            push!(basislist,[0, 0, 0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5]])
+        end
+    end
+
+
     return basislist
 end
 
-#need to rewrite
-function constructdbasis3(basis, deltat, tmin, tmax)
-    # constructs list of derivatives of basis values for all basis functions at all values of t
-    # order 3
-    # only has t 0:3 for five control points
-    # it essentially just pads the output of the basis function so the indexing of the array is consistent
-    units = 1/deltat
-    dbasislist = []
-    if tmin <= 0 && tmax >= 1
-        for t in 0:(units-1)
-            autobasis = bsplines(basis, deltat*t, Derivative(1))
-            push!(dbasislist,[autobasis[1], autobasis[2], autobasis[3], 0,0])
-        end
-    end
-    if tmin<=1 && tmax>=2
-        for t in units:(2*units-1)
-            autobasis = bsplines(basis, deltat*t, Derivative(1))
-            push!(dbasislist,[0,autobasis[2], autobasis[3], autobasis[4], 0])
-        end
-    end
-    if tmin<=2 && tmax>=3
-        for t in 2*units:3*units
-            autobasis = bsplines(basis, deltat*t, Derivative(1))
-            push!(dbasislist,[0,0,autobasis[3], autobasis[4], autobasis[5]])
-        end
-    end
-    
-    return dbasislist
-end
 
-#need to rewrite
-function constructddbasis3(basis, deltat, tmin, tmax)
-    # constructs list of second derivatives of basis values for all basis functions at all values of t
-    # order 3
-    # only has t 0:3 for five control points
-    # it essentially just pads the output of the basis function so the indexing of the array is consistent
-    units = 1/deltat
-    ddbasislist = []
-    if tmin <= 0 && tmax >= 1
-        for t in 0:(units-1)
-            autobasis = bsplines(basis, deltat*t, Derivative(2))
-            push!(ddbasislist,[autobasis[1], autobasis[2], autobasis[3], 0,0])
-        end
-    end
-    if tmin<=1 && tmax>=2
-        for t in units:(2*units-1)
-            autobasis = bsplines(basis, deltat*t, Derivative(2))
-            push!(ddbasislist,[0,autobasis[2], autobasis[3], autobasis[4], 0])
-        end
-    end
-    if tmin<=2 && tmax>=3
-        for t in 2*units:3*units
-            autobasis = bsplines(basis, deltat*t, Derivative(2))
-            push!(ddbasislist,[0,0,autobasis[3], autobasis[4], autobasis[5]])
-        end
-    end
-    
-    return ddbasislist
-end
+#=
+
+Stitch Energy
+
+=#
 
 # gives energy of the left half of the stitch
 function totalenergy(cpt1, cpt2, cpt3)
@@ -681,10 +686,9 @@ function totalenergy(cpt1, cpt2, cpt3)
     ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), 0] for t in 0:deltat:5]
 
     # gets values of the basis functions and their derivatives at every point
-    # need to fix
-    thebasis = constructbasis3(basis, deltat, 0, 3)
-    dbasis = constructdbasis3(basis, deltat, 0, 3)
-    ddbasis = constructddbasis3(basis, deltat, 0, 3)
+    thebasis = constructbasis5(basis, deltat, 0, 5, 0)
+    dbasis = constructbasis5(basis, deltat, 0, 5, 1)
+    ddbasis = constructbasis5(basis, deltat, 0, 5, 2)
 
     #computes bending energy for curve
     bending = bending(dcurve, ddcurve, dbasis, ddbasis, deltat)
@@ -735,6 +739,12 @@ function printtotalenergy(cpt1, cpt2, cpt3)
     println(energy)
 end
 
+
+#=
+
+Descent
+
+=#
 
 # HERE IS WHERE THE DESCENT IS DEFINED
 # need to do something for the height
@@ -891,6 +901,12 @@ function gradientdescent(cpt1, cpt2, cpt3, cpt4, learn_rate, conv_threshold, max
 end
 
 
+#=
+
+Where the code actually runs
+
+=#
+
 # actually doing stuff now
 
 deltat = 0.01
@@ -900,6 +916,12 @@ deltat = 0.01
 grad = gradientdescent(xpoints1, ypoints1, ypoints2, zpoints2, 0.001, 0.000000001, 100000)
 
 
+
+#=
+
+Visualizations
+
+=#
 
 #Plot the finalized clasp
 xspline = Spline(basis, grad[1])
