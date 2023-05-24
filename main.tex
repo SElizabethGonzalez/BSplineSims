@@ -1,0 +1,366 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage[letterpaper, portrait, margin=1in]{geometry}
+\usepackage{amsmath}
+
+\title{Derivations Utilized in the New Gradient Descent Algorithm}
+\author{Sarah Gonzalez}
+\date{April 2023}
+
+\begin{document}
+
+\maketitle
+
+\section{Bending Energy}
+
+The bending energy is given as
+
+\begin{equation}
+    E_{bend} = \frac{B}{2} \int_0^L \kappa(s)^2 ds
+\end{equation}
+
+\noindent
+where $B$ is the bending modulus. To generalize to a parametric function in $R^3$,
+
+\begin{equation}
+   \kappa(t) = \frac{|F'(t) \times F''(t)|}{|F'(t)|^3}
+\end{equation}
+
+\noindent
+where $F(t) = (B_x(t), B_y(t), B_z(t))$ and constructed of b-splines in each direction. Thus,
+
+\begin{equation}
+    \kappa(t) = \frac{|(B_y'B_z''-B_z'B_y'' ,  B_z'B_x''-B_x'B_z'' ,  B_x'B_y''-B_y'B_x'' )|}{|(B_x', B_y', B_z')|^3}
+    \label{kappaoft}
+\end{equation}
+
+\noindent
+where the parameterization is not written for notation purposes. The bending energy is thus given by
+
+\begin{equation}
+    E_{bend} = \frac{B}{2} \sum_t \bigg( \frac{|(B_y'B_z''-B_z'B_y'' ,  B_z'B_x''-B_x'B_z'' ,  B_x'B_y''-B_y'B_z'' )|}{|(B_x', B_y', B_z')|^3} \bigg)^2 |(B_x', B_y', B_z')| dt
+\end{equation}
+
+\begin{equation}
+    E_{bend} = \frac{B}{2} \sum_t \frac{|(B_y'B_z''-B_z'B_y'' ,  B_z'B_x''-B_x'B_z'' ,  B_x'B_y''-B_y'B_z'' )|^2}{|(B_x', B_y', B_z')|^6} |(B_x', B_y', B_z')| dt
+\end{equation}
+
+\begin{equation}
+    E_{bend} = \frac{B}{2} \sum_t \frac{|(B_y'B_z''-B_z'B_y'' ,  B_z'B_x''-B_x'B_z'' ,  B_x'B_y''-B_y'B_z'' )|^2}{|(B_x', B_y', B_z')|^5} dt
+\end{equation}
+
+If we define an array $x$ containing $(B_x(t), B_x'(t),B_x''(t),B_y(t), B_y'(t),B_y''(t),B_z(t), B_z'(t),B_z''(t))$ for some interval of $t$ in $0:\Delta t:T$, we can write the bending energy in terms of this array utilizing a matrix cross product function.
+
+$$d1 = (x[2],x[5],x[8])$$
+$$d2 = (x[3],x[6],x[9])$$
+
+\begin{equation}
+    E_{bend} = \frac{B}{2} \sum_t \frac{norm(cross(d1,d2))^2}{norm(d1)^5} \Delta t
+\end{equation}
+
+For the gradient descent algorithm, I need the partial derivative of the bending energy wrt to the control point. It is important to note that due to the locality of the bending energy, changes in the bending energy only occur for the three Bezier curves affected by the control point at hand. Therefore, sweeps to find the change in bending energy only need to be over the time periods before, during, and after the control point. 
+
+First, lets compute the necessary derivatives of the b-spline.
+
+\begin{equation}
+    B(t) = \sum_i^n B_{i,k}(t)P_i
+\end{equation}
+
+\noindent
+where $B_{i,p}(t)$ is the $k'th$ order basis function and $P_i$ is the control point. Derivatives wrt $P_i$ are thus given as
+
+\begin{equation}
+    \frac{dB(t)}{dP_i} = B_{i,k}(t)
+\end{equation}
+
+\begin{equation}
+    \frac{dB'(t)}{dP_i} = B'_{i,k}(t)
+\end{equation}
+
+\begin{equation}
+    \frac{dB''(t)}{dP_i} = B''_{i,k}(t)
+\end{equation}
+
+\noindent
+The N'th derivative of the basis functions can be numerically found in Julia with bsplines(basis, t, Derivative(N)).
+
+On to partial derivative of the bending energy wrt $P_i$....
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} = \frac{d}{dP_i} \frac{B}{2} \int \kappa(s)^2 ds
+\end{equation}
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \int \frac{d}{dP_i} (\kappa(t)^2 |F'(t)|) dt
+\end{equation}
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \int \frac{d}{dP_i} \bigg(\frac{|F'(t) \times F''(t)|}{|F'(t)|^3}\bigg)^2 |F'(t)|) dt
+\end{equation}
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \int \frac{d}{dP_i} \bigg((|F'(t) \times F''(t)|)^2 |F'(t)|^{-5}\bigg) dt
+\end{equation}
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \int \bigg(\frac{d}{dP_i}(|F'(t) \times F''(t)|)^2 |F'(t)|^{-5} + (|F'(t) \times F''(t)|)^2 \frac{d}{dP_i}|F'(t)|^{-5}\bigg) dt
+    \label{dE_benddP_i}
+\end{equation}
+
+Let's consider each term individually. First, the derivative of the norm of the cross product squared.
+
+\begin{equation}
+    \frac{d}{dP_i}(|F'(t) \times F''(t)|)^2 = 2 |F'(t) \times F''(t)| \frac{d|F'(t) \times F''(t)|}{dP_i}
+    \label{devsquarenormcross}
+\end{equation}
+
+\noindent
+where
+
+\begin{equation}
+    \frac{d|F'(t) \times F''(t)|}{dP_i} = \frac{d}{dP_i}(c_x^2 + c_y^2 + c_z^2)^{1/2}
+\end{equation}
+
+\begin{equation}
+    \frac{d|F'(t) \times F''(t)|}{dP_i} = \frac{1}{2(c_x^2 + c_y^2 + c_z^2)^{1/2}} \frac{d}{dP_i} (c_x^2 + c_y^2 + c_z^2)
+\end{equation}
+
+\noindent
+and $c_i$ is the $i$'th component of the cross product shown in Eq. \ref{kappaoft}. Moving forward is highly dependent on the spline affected by the control point in question and which cartesian direction that spline is associated with. For a control point moving the curve in the x-direction...
+
+
+\begin{equation}
+    \frac{d}{dP_i} (c_x^2 + c_y^2 + c_z^2) = 2B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + 2B''_{i,k,x}(t)(c_yB_z' - c_zB_y')
+\end{equation}
+
+\begin{equation}
+    \frac{d|F'(t) \times F''(t)|}{dP_i} = \frac{B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + B''_{i,k,x}(t)(c_yB_z' - c_zB_y')}{(c_x^2 + c_y^2 + c_z^2)^{1/2}}
+\end{equation}
+
+\begin{equation}
+    \frac{d|F'(t) \times F''(t)|}{dP_i} = \frac{B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + B''_{i,k,x}(t)(c_yB_z' - c_zB_y')}{|F'(t) \times F''(t)|}
+\end{equation}
+
+\noindent
+Returning to Eq. \ref{devsquarenormcross},
+
+\begin{equation}
+    \frac{d}{dP_i}(|F'(t) \times F''(t)|)^2 = 2 |F'(t) \times F''(t)| \frac{B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + B''_{i,k,x}(t)(c_yB_z' - c_zB_y')}{|F'(t) \times F''(t)|}
+\end{equation}
+
+\begin{equation}
+    \frac{d}{dP_i}(|F'(t) \times F''(t)|)^2 = 2B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + 2B''_{i,k,x}(t)(c_yB_z' - c_zB_y')
+\end{equation}
+
+\noindent
+The first term of the change of bending energy in Eq. \ref{dE_benddP_i} is thus
+
+\begin{equation}
+    \frac{2B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + 2B''_{i,k,x}(t)(c_yB_z' - c_zB_y')}{|F'(t)|^{5}}
+\end{equation}
+
+\noindent
+with analogues for the other cartesian directions based on the outcomes of Eq. 20. We can now focus on the second term of Eq. \ref{dE_benddP_i}.
+
+\begin{equation}
+    \frac{d}{dP_i}|F'(t)|^{-5} = -5|F'(t)|^{-6}\frac{d|F'(t)|}{dP_i}
+\end{equation}
+
+\begin{equation}
+    \frac{d}{dP_i}|F'(t)|^{-5} = -5|F'(t)|^{-6}\frac{d}{dP_i} ((B'_x)^2 + (B'_y)^2 + (B'_z)^2)^{1/2}
+\end{equation}
+
+\noindent
+where
+
+\begin{equation}
+    \frac{d}{dP_i} ((B'_x)^2 + (B'_y)^2 + (B'_z)^2)^{1/2} = \frac{1}{2|F'(t)|} \frac{d}{dP_i}((B'_x)^2 + (B'_y)^2 + (B'_z)^2)
+\end{equation}
+
+Again, the cartesian direction affected becomes relevant. For x...
+
+\begin{equation}
+    \frac{d}{dP_i} ((B'_x)^2 + (B'_y)^2 + (B'_z)^2)^{1/2} = \frac{B'_x B'_{i,k,x}(t)}{|F'(t)|} 
+\end{equation}
+
+\noindent
+such that
+
+\begin{equation}
+    \frac{d}{dP_i}|F'(t)|^{-5} = -5|F'(t)|^{-6}\frac{B'_x B'_{i,k,x}(t)}{|F'(t)|}
+\end{equation}
+
+\begin{equation}
+    \frac{d}{dP_i}|F'(t)|^{-5} = \frac{-5 B'_x B'_{i,k,x}(t)}{|F'(t)|^7}
+\end{equation}
+
+The change in bending energy when a control point affects the b-spline in the x-direction is thus
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \sum_t \bigg( \frac{2B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + 2B''_{i,k,x}(t)(c_yB_z' - c_zB_y')}{|F'(t)|^{5}} + (|F'(t) \times F''(t)|)^2 \frac{-5 B'_x B'_{i,k,x}(t)}{|F'(t)|^7}\bigg) \Delta t
+\end{equation}
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \sum_t \bigg( 2B'_{i,k,x}(t)(c_zB_y''-c_yB_z'') + 2B''_{i,k,x}(t)(c_yB_z' - c_zB_y') + (|F'(t) \times F''(t)|)^2 \frac{-5 B'_x B'_{i,k,x}(t)}{|F'(t)|^2}\bigg) \frac{\Delta t}{|F'(t)|^{5}}
+    \label{dE_benddP_iforx}
+\end{equation}
+
+Wow isn't that nasty.
+
+Here is the y-direction analogue.
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \sum_t \bigg( 2B'_{i,k,y}(t)(c_xB_z''-c_zB_x'') + 2B''_{i,k,y}(t)(c_zB_x' - c_xB_z') + (|F'(t) \times F''(t)|)^2 \frac{-5 B'_y B'_{i,k,y}(t)}{|F'(t)|^2}\bigg) \frac{\Delta t}{|F'(t)|^{5}}
+    \label{dE_benddP_iforx}
+\end{equation}
+
+
+Here is the z-direction analogue.
+
+\begin{equation}
+    \frac{dE_{bend}}{dP_i} =  \frac{B}{2} \sum_t \bigg( 2B'_{i,k,z}(t)(c_yB_x''-c_xB_y'') + 2B''_{i,k,z}(t)(c_xB_y' - c_yB_x') + (|F'(t) \times F''(t)|)^2 \frac{-5 B'_z B'_{i,k,z}(t)}{|F'(t)|^2}\bigg) \frac{\Delta t}{|F'(t)|^{5}}
+    \label{dE_benddP_iforx}
+\end{equation}
+
+Lovely.
+
+
+\section{Contact Energy}
+
+The contact force between two points along the yarn is given as
+
+\begin{equation}
+    F_{contact}(R) = \frac{A_{comp}k(2r-2r_{core})}{p}\bigg(\bigg(\frac{2r-2r_{core}}{R-2r_{core}}\bigg)^p -1 \bigg) \hat{R}
+\end{equation}
+
+\noindent
+where $R=r_1-r_2$. The contact potential density is thus
+
+\begin{equation}
+    V_{contact}(R) = \frac{k(2r-2r_{core})^2}{p(p-1)}\bigg(\bigg(\frac{R-2r_{core}}{2r-2r_{core}}\bigg)^{1-p} -1 - (p-1)\bigg( 1 - \frac{R-2r_{core}}{2r-2r_{core}}\bigg) \bigg)
+\end{equation}
+
+We can find the change in energy density upon changing a control point.
+
+\begin{equation}
+    \frac{dV_{contact}}{dP_i} = \frac{dR}{dP_i}\frac{dV_{contact}}{dR} = \frac{dR}{dP_i} \cdot -1*F_{contact}(R)
+\end{equation}
+
+\noindent
+where
+
+\begin{equation}
+    \frac{dR}{dP_i} = \frac{d}{dP_i} (r_1-r_2)
+\end{equation}
+
+\begin{equation}
+    \frac{dR}{dP_i} = \frac{d}{dP_i} (r_{1x}-r_{2x}, r_{1y}-r_{2y}, r_{1z}-r_{2z})
+\end{equation}
+
+\noindent
+Thus the directionality of the control point becomes relevant. For ease here I'm going to ignore that.
+
+\begin{equation}
+    \frac{dR}{dP_i} = (\frac{d}{dP_i}(r_{1x}-r_{2x}), \frac{d}{dP_i}(r_{1y}-r_{2y}), \frac{d}{dP_i}(r_{1z}-r_{2z}))
+\end{equation}
+
+\begin{equation}
+    \frac{dR}{dP_i} = (\frac{dr_{1x}}{dP_i}-\frac{dr_{2x}}{dP_i}, \frac{dr_{1y}}{dP_i}-\frac{dr_{2y}}{dP_i},\frac{d r_{1z}}{dP_i}-\frac{dr_{2z}}{dP_i})
+\end{equation}
+
+\begin{equation}
+    \frac{dR}{dP_i} = ((B_{i,k,1x}(t)-B_{i,k,2x}(t)), (B_{i,k,1y}(t)-B_{i,k,2y}(t)), (B_{i,k,1z}(t)-B_{i,k,2z}(t))
+\end{equation}
+
+\noindent
+where only one of these components is non-zero. In most cases, $r_2$ will be unchanged by the change in control point and those terms will be zero. However, there are locations along the stitch that are in contact with their direct analogues on other stitches above or below, and I'm unsure whether or not $\frac{dR}{dP_i}$ would be zero in that case. I think it is, but I'm not sure. Either way,
+
+\begin{equation}
+    \frac{dV_{contact}}{dP_i} = ((B_{i,k,1x}(t)-B_{i,k,2x}(t)), (B_{i,k,1y}(t)-B_{i,k,2y}(t)), (B_{i,k,1z}(t)-B_{i,k,2z}(t)) \cdot -1*F_{contact}(R)
+\end{equation}
+
+\begin{equation}
+    \frac{dV_{contact}}{dP_i} = -(B_{i,k,1l}(t)-B_{i,k,2l}(t))\hat{l} \cdot F_{contact}(R)
+\end{equation}
+
+\noindent
+where only one coordinate, $l=[x,y,z]$, is relevant depending on the b-spline the control point belongs to. When converting from a energy density to an energy, we need to multiply by some area and include the parameterization such that
+
+\begin{equation}
+    E_{contact} = \sum_t V_{contact}(R)|r_1'(t)||r'_2(t)|(\Delta t)^2
+\end{equation}
+
+\noindent
+The change in energy upon changing a control point is thus
+
+\begin{equation}
+    \frac{dE_{contact}}{dP_i} = \sum_t (\Delta t)^2 \bigg(\frac{dV_{contact}(R)}{dP_i}|r_1'(t)||r'_2(t)| + V_{contact}(R)\frac{d|r_1'(t)|}{dP_i}|r'_2(t)| + V_{contact}(R)|r_1'(t)|\frac{d|r'_2(t)|}{dP_i}\bigg)
+\end{equation}
+
+Depression. The first term is easily determined given our previous calculations. Let's consider the middle term.
+
+\begin{equation}
+    \frac{d|r_1'(t)|}{dP_i} = \frac{d}{dP_i} ((r'_{1x})^2 + (r'_{1y})^2 + (r'_{1z})^2)^{1/2}
+\end{equation}
+
+\begin{equation}
+    \frac{d|r_1'(t)|}{dP_i} = \frac{2r'_{1l}}{2((r'_{1x})^2 + (r'_{1y})^2 + (r'_{1z})^2)^{1/2}} \frac{dr'_{1l}}{dP_i}
+\end{equation}
+
+\noindent
+for some affected coordinate $l=[x,y,z]$. In the notation used previously,
+
+\begin{equation}
+    \frac{d|r_1'(t)|}{dP_i} = \frac{B'_{1l} B'_{i,k,1l}(t)}{|r_1'(t)|} 
+\end{equation}
+
+\noindent
+The change in contact energy can thus be written
+
+\begin{multline}
+    \frac{dE_{contact}}{dP_i} = \sum_t (\Delta t)^2 \bigg(-((B_{i,k,1l}(t)-B_{i,k,2l}(t))\hat{l} \cdot F_{contact}(R))|r_1'(t)||r'_2(t)|  \\ 
+    +  V_{contact}(R)\bigg(\frac{B'_{1l} B'_{i,k,1l}(t)}{|r_1'(t)|} |r'_2(t)| + |r_1'(t)|\frac{B'_{2l} B'_{i,k,2l}(t)}{|r_2'(t)|} \bigg)\bigg)
+\end{multline}
+
+Note that this equation assumes uniform sampling $\Delta t$. We are also implicitly summing over all of $r_2$. For $r_1$, we only have to sum over the local points in the nearby portions of the knot set. It would be useful to record a list of all relevant $r_2$'s for each $r_1$, but I'm not sure exactly how I would go about doing that.  I guess I could just make a giant list [$t_1$, $|r'_1|$, $r'_{1x}$, $r'_{1y}$, $r'_{1z}$, $t_2$, $|r'_2|$, $r'_{2x}$, $r'_{2y}$, $r'_{2z}$, $F(R)$, $\hat{R}$, $V_{contact}(R)$] for $V_{contact}(R) \neq 0$ when computing the contact energy and use that list when computing the derivative. Only other things I would need would be the spline basis information.
+
+\section{Length Constraint}
+
+The total length of the curve is given by 
+
+\begin{equation}
+    L = \int \bigg((B'_x(t))^2 + (B'_y(t))^2 + (B'_z(t))^2 \bigg)^{1/2} dt
+\end{equation}
+
+The change in length for some affected coordinate direction $l$ is
+
+\begin{equation}
+   \frac{dL}{dP_i}  = \int \frac{d}{dP_i} \bigg((B'_x(t))^2 + (B'_y(t))^2 + (B'_z(t))^2 \bigg)^{1/2} dt
+\end{equation}
+
+\begin{equation}
+   \frac{dL}{dP_i}  = \int \frac{B'_{l} B'_{i,k,l}(t)}{((B'_x(t))^2 + (B'_y(t))^2 + (B'_z(t))^2)^{1/2}} dt
+\end{equation}
+
+\begin{equation}
+   \frac{dL}{dP_i}  = \int \frac{B'_{l} B'_{i,k,l}(t)}{|F'(t)|} dt
+\end{equation}
+
+\begin{equation}
+   \frac{dL}{dP_i}  = \sum_t \frac{B'_{l} B'_{i,k,l}(t)}{|F'(t)|} \Delta t
+\end{equation}
+
+
+The constraint is given by:
+
+\begin{equation}
+    (L-L_0)^2 = 0
+\end{equation}
+
+Thus the derivative of the constraint wrt $P_i$ is
+
+\begin{equation}
+    2(L-L_0) \sum_t \frac{B'_{l} B'_{i,k,l}(t)}{|F'(t)|} \Delta t
+\end{equation}
+
+\end{document}
