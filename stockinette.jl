@@ -43,7 +43,11 @@ initialcurve = CSV.read("filename.csv")
 spl = approximate() # okay so I can't get this to work rn so maybe just import the initial control points?
 # alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
 
-
+# initial control points
+# nine for each dimension
+xpoints = []
+ypoints = []
+zpoints = []
 
 #=
 
@@ -586,7 +590,7 @@ end
 # list should be fordEbend, knot is the part of the curve changed by the control point
 # dimension x=1 y=2 z=3
 # tmin and tmax give the part of the parameterization affected by the control point
-function dLdPi(list, deltat, tmin, tmax, dimension, knot, targetlength, currentlength)
+function dLdPi(list, deltat, tmin, tmax, dimension, knot, currentlength)
 
     relevant = []
 
@@ -674,7 +678,7 @@ Stitch Energy
 =#
 
 # gives energy of the left half of the stitch
-function totalenergy(cpt1, cpt2, cpt3)
+function totalenergy(cpt1, cpt2, cpt3, height, width)
     # contructs the splines
     spline1 = Spline(basis, cpt1)
     spline2 = Spline(basis, cpt2)
@@ -682,8 +686,8 @@ function totalenergy(cpt1, cpt2, cpt3)
 
     # gets values for the curve positions, and 1st 2nd derivatives
     curve = [[spline1(t), spline2(t), spline3(t)] for t in 0:deltat:5]
-    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), 0] for t in 0:deltat:5]
-    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), 0] for t in 0:deltat:5]
+    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), spline3(t, Derivative(1))] for t in 0:deltat:5]
+    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), spline3(t, Derivative(2))] for t in 0:deltat:5]
 
     # gets values of the basis functions and their derivatives at every point
     thebasis = constructbasis5(basis, deltat, 0, 5, 0)
@@ -707,7 +711,7 @@ end
 
 # just prints the components of the energy for after the sim has run
 # GIVES ENERGY OF TOTAL STITCH, NOT JUST HALF OF IT
-function printtotalenergy(cpt1, cpt2, cpt3)
+function printtotalenergy(cpt1, cpt2, cpt3, height, width)
     # contructs the splines
     spline1 = Spline(basis, cpt1)
     spline2 = Spline(basis, cpt2)
@@ -715,8 +719,8 @@ function printtotalenergy(cpt1, cpt2, cpt3)
 
     # gets values for the curve positions, and 1st 2nd derivatives
     curve = [[spline1(t), spline2(t), spline3(t)] for t in 0:deltat:5]
-    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), 0] for t in 0:deltat:5]
-    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), 0] for t in 0:deltat:5]
+    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), spline3(t, Derivative(1))] for t in 0:deltat:5]
+    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), spline3(t, Derivative(2))] for t in 0:deltat:5]
 
     # gets values of the basis functions and their derivatives at every point
     # need to fix
@@ -748,10 +752,10 @@ Descent
 
 # HERE IS WHERE THE DESCENT IS DEFINED
 # need to do something for the height
-function descent(listbend, listcomp, deltat, tmin, tmax, dimension, knot, lambda,targetlength, length)
+function descent(listbend, listcomp, deltat, tmin, tmax, dimension, knot, lambda, length)
     benddescent = dEbenddPi(listbend, deltat, tmin, tmax, dimension, knot)
     compdescent = dEcompdPi(listcomp, deltat, tmin, tmax, dimension, knot)
-    lengthstuff = dLdPi(listbend, deltat, tmin, tmax, dimension, knot, targetlength, length)
+    lengthstuff = dLdPi(listbend, deltat, tmin, tmax, dimension, knot, length)
     lengthascent = lengthstuff[1]
     lengthpenalty = lengthstuff[2]
 
@@ -766,92 +770,79 @@ end
 
 
 # need to update/fix
-function gradientdescent(cpt1, cpt2, cpt3, cpt4, learn_rate, conv_threshold, max_iter)
+function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     # gets all the data for the original input curves
-    oldenergy = totalenergy(cpt1,cpt2,cpt3)
+    oldenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
     fordEbend = oldenergy[2]
     fordEcomp = oldenergy[3]
     oldenergy = oldenergy[1]
 
     oglength = totallength(fordEbend,0.01,5)
 
-    #=
-
-    #[t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
-    #thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z]
-
-    df = DataFrame(r1x=Float64[], r1y=Float64[], r1z=Float64[],r2x=Float64[], r2y=Float64[], r2z=Float64[],rhatx=Float64[], rhaty=Float64[], rhatz=Float64[])
-
-    for i in 1:length(fordEcomp)
-        push!(df, (fordEcomp[i][18],fordEcomp[i][19],fordEcomp[i][20],fordEcomp[i][21],fordEcomp[i][22],fordEcomp[i][23],
-        fordEcomp[i][12][1],fordEcomp[i][12][2],fordEcomp[i][12][3]))
-    end
-
-    #println(df)
-    CSV.write("forcedirectioniteration0.csv",  df, header=false)
-
-    #CSV.write("forcedirectioniteration" * string(iterations) * ".csv",  DataFrame(forexport), header=false)
-
-    =#
-
     println("Here is the original energy")
     println(oldenergy)
 
     # prints the components of the energy
-    printtotalenergy(cpt1, cpt2, cpt3)
+    #printtotalenergy(cpt1, cpt2, cpt3)
 
     println("here is the og length of curve")
     println(oglength)
 
-    # these are guesses
-    lambda1 = 0.001
-    lambda2 = 0.001
+    lambda = 0.001
 
     converged = false
     iterations = 0
 
     while converged == false
-        #=
-        so P_i affects t_i < t < t_{i+k} and the knot i but when indexing it starts at one so actually knot = i+1
-        endpoint of curve are given by the first and last control points
-        for k=3
-        descent(listbend, listcomp, deltat, tmin, tmax, dimension, knot, lambda, curvenumber)
-        =#
 
         length = totallength(fordEbend,0.01,5)
 
         # control points for x-direction of curve
-        cpt101 = cpt1[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, 1, targetlength, length)
-        cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 1, 2, lambda, 1, targetlength, length)
-        cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 1, 3, lambda, 1, targetlength, length)
-        cpt104 = cpt1[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 3, 1, 4, lambda, 1, targetlength, length)
-        cpt105 = cpt1[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 3, 1, 5, lambda, 1, targetlength, length)
+        cpt101 = cpt1[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, length)
+        cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 1, 2, lambda, length)
+        cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 1, 3, lambda, length)
+        cpt104 = cpt1[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 1, 4, lambda, length)
+        cpt105 = cpt1[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 1, 5, lambda, length)
+        cpt106 = cpt1[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 1, 6, lambda, length)
+        cpt107 = cpt1[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 1, 7, lambda, length)
+        cpt108 = cpt1[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 1, 8, lambda, length)
+        cpt108 = cpt1[9] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 1, 9, lambda, length)
         # last control point of x should be 0 and stay 0
 
-        cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105]
+        cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105, cpt106, cpt107, cpt108, cpt109]
+
+        width = cpt108 - cpt101
 
         # control points for y-direction of curve
-        cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 2, 1, lambda, 1, targetlength, length)
-        cpt202 = cpt2[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 2, 2, lambda, 1, targetlength, length)
-        cpt203 = cpt2[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 2, 3, lambda, 1, targetlength, length)
-        cpt204 = cpt2[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 3, 2, 4, lambda, 1, targetlength, length)
-        cpt205 = cpt2[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 3, 2, 5, lambda, 1, targetlength, length)
+        cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 2, 1, lambda, length)
+        cpt202 = cpt2[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 2, 2, lambda, length)
+        cpt203 = cpt2[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 2, 3, lambda, length)
+        cpt204 = cpt2[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 2, 4, lambda, length)
+        cpt205 = cpt2[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 2, 5, lambda, length)
+        cpt206 = cpt2[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 2, 6, lambda, length)
+        cpt207 = cpt2[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 2, 7, lambda, length)
+        cpt208 = cpt2[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 2, 8, lambda, length)
+        cpt209 = cpt2[9] -learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 2, 9, lambda, length)
 
-        cpt2 = [cpt201, cpt202, cpt203, cpt204, cpt205]
+        cpt2 = [cpt201, cpt202, cpt203, cpt204, cpt205, cpt206, cpt207, cpt208, cpt209]
 
         # control points for z-direction of curve
-        cpt301 = cpt3[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 3, 1, lambda, 2, targetlength, length)
-        cpt302 = cpt3[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 3, 2, lambda, 2, targetlength, length)
-        cpt303 = cpt3[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 3, 3, lambda, 2, targetlength, length)
-        cpt304 = cpt3[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 3, 3, 4, lambda, 2, targetlength, length)
-        cpt305 = cpt3[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 3, 3, 5, lambda, 2, targetlength, length)
+        cpt301 = cpt3[1] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 3, 1, lambda, length)
+        cpt302 = cpt3[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 3, 2, lambda, length)
+        cpt303 = cpt3[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 3, 3, lambda, length)
+        cpt304 = cpt3[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 3, 4, lambda, length)
+        cpt305 = cpt3[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 3, 5, lambda, length)
+        cpt306 = cpt3[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 3, 6, lambda, length)
+        cpt307 = cpt3[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 3, 7, lambda, length)
+        cpt308 = cpt3[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 3, 8, lambda, length)
+        cpt309 = cpt3[9] -learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 3, 9, lambda, length)
         # first control point of z should be 0 and stay 0
 
-        cpt3 = [cpt301, cpt302, cpt303, cpt304, cpt305]
+        cpt3 = [cpt301, cpt302, cpt303, cpt304, cpt305, cpt306, cpt307, cpt308, cpt309]
 
         #computes the new energies and the new lists used to determine dE/dP_i
-        newenergy = totalenergy(cpt1, cpt2, cpt3)
+        newenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
         fordEbend = newenergy[2]
         fordEcomp = newenergy[3]
         newenergy = newenergy[1]
@@ -895,7 +886,7 @@ function gradientdescent(cpt1, cpt2, cpt3, cpt4, learn_rate, conv_threshold, max
 
     println("Here is the energy breakdown:")
 
-    printtotalenergy(cpt1, cpt2, cpt3)
+    printtotalenergy(cpt1, cpt2, cpt3, height, width)
 
     return cpt1, cpt2, cpt3
 end
@@ -907,13 +898,11 @@ Where the code actually runs
 
 =#
 
-# actually doing stuff now
-
 deltat = 0.01
 
 # the control point lists were defined at the very beginning
 # the last number is the max number of iterations
-grad = gradientdescent(xpoints1, ypoints1, ypoints2, zpoints2, 0.001, 0.000000001, 100000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.001, 0.000000001, 100000)
 
 
 
