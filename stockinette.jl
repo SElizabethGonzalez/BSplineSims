@@ -720,9 +720,9 @@ function printtotalenergy(cpt1, cpt2, cpt3)
 
     # gets values of the basis functions and their derivatives at every point
     # need to fix
-    thebasis = constructbasis3(basis, deltat, 0, 3)
-    dbasis = constructdbasis3(basis, deltat, 0, 3)
-    ddbasis = constructddbasis3(basis, deltat, 0, 3)
+    thebasis = constructbasis5(basis, deltat, 0, 5, 0)
+    dbasis = constructdbasis5(basis, deltat, 0, 5, 1)
+    ddbasis = constructddbasis5(basis, deltat, 0, 5, 2)
 
     #computes bending energy for curve
     # muplitply by two cause it's only doing the left half

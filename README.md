@@ -10,13 +10,12 @@
  Currently, the simulation follws one half of the stitch and minimizes the nergy functional using gradient descent to find the minimum energy stitch configuration.
 
  Things to do:
- 1. Update the b-spline basis functions to represent fifth order b-splines with parameter t from 0:5
- 2. Calculate the new functionals necessary to implement a stitch height constraint
- 3. Implement the stitch height constraint
- 4. Update the gradient descent algorithm
- 5. Implement new plotting scheme to plot the final stitch as a 3x3 stitch grid
- 6. Implement output of results
- 7. Figure out how to import a starting configuration
+ 1. Calculate the new functionals necessary to implement a stitch height constraint
+ 2. Implement the stitch height constraint
+ 3. Update the gradient descent algorithm
+ 4. Implement new plotting scheme to plot the final stitch as a 3x3 stitch grid
+ 5. Implement output of results
+ 6. Figure out how to import a starting configuration
 
 
  To run the code:
