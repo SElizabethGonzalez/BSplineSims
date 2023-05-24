@@ -4,7 +4,7 @@ zero-force simulation
 st the box dimensions are variable
 S.E. Gonzalez
 written May 22 2023
-updated May 22 2023
+updated May 24 2023
 =#
 
 using BSplines, Plots, LinearAlgebra, CSV, DataFrames
