@@ -7,6 +7,11 @@ written May 22 2023
 updated May 24 2023
 =#
 
+#=
+right now, this simulation is essentially fixing the height and letting the width vary
+to fix the width, implement the fixwidth fnc in the gradient descent and comment out the first x cpt
+=#
+
 using BSplines, Plots, LinearAlgebra, CSV, DataFrames
 
 
@@ -22,6 +27,9 @@ rcore = 0.02
 ryarn = 0.1
 stitchlength = 12
 targetlength = stitchlength/2
+
+width = 0
+height = 0
 
 # this is the penalty for the length constraint
 penalty = 10
@@ -100,6 +108,14 @@ end
 function righthalf(list)
     newlist = [[-1*list[i][1], list[i][2], list[i][3], list[i][4]] for i in 1:length(list)]
     newlist = reverse(newlist) # invertes the new half so the final list moves sequentially along the stitch
+    return newlist
+end
+
+
+function fixwidth(xlist, idealwidth)
+    initialsep = xlist[end] - xlist[1]
+    ratio = idealwidth/initialsep
+    newlist = xlist .* ratio
     return newlist
 end
 
@@ -376,9 +392,20 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
                 # the 1 up one
                 push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
                 thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                
+                # need to fix this here so the thing added to fordEcomp reflects the right thing
+                # my current thought is that I need to switch the locations of the contact. so switch t1, 
+                # normdr1, dr1x, dr1y, dr1z with there 2 couterparts
+                # I already have rhat correctly transformed
+                # thebasis and dbasis also need to be switched
+                # and then I can do translate on the positions and push them down one cell
+
+                push!(fordEcomp, [t2,normdr2,dr2x,dr2y,dr2z,t1,normdr1,dr1x,dr1y,dr1z,forcemag,minusrhat,potentialdensity, 
+                thebasis[j], dbasis[j], thebasis[i], dbasis[i],r2x, r2y-height, r2z, r1x, r1y-height, r1z])
+                
                 # the 1 down one
-                push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,minusrhat,potentialdensity, 
-                thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y-2*height, r2z])
+                #push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,minusrhat,potentialdensity, 
+                #thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y-2*height, r2z])
             end
         end
 
@@ -428,9 +455,20 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
                 # the 2 up one
                 push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
                 thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+
+                # need to fix this here so the thing added to fordEcomp reflects the right thing
+                # my current thought is that I need to switch the locations of the contact. so switch t1, 
+                # normdr1, dr1x, dr1y, dr1z with there 2 couterparts
+                # I already have rhat correctly transformed
+                # thebasis and dbasis also need to be switched
+                # and then I can do translate on the positions and push them down one cell
+
+                push!(fordEcomp, [t2,normdr2,dr2x,dr2y,dr2z,t1,normdr1,dr1x,dr1y,dr1z,forcemag,minusrhat,potentialdensity, 
+                thebasis[j], dbasis[j], thebasis[i], dbasis[i],r2x, r2y-2*height, r2z, r1x, r1y-2*height, r1z])
+
                 # the 2 down one
-                push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,minusrhat,potentialdensity, 
-                thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y-4*height, r2z])
+                #push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,minusrhat,potentialdensity, 
+                #thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y-4*height, r2z])
             end
         end
 
@@ -761,7 +799,7 @@ function descent(listbend, listcomp, deltat, tmin, tmax, dimension, knot, lambda
 
     # height stuff??
     # need these for all the knots?
-    heightdescent = dEcompdPi(listcomp, deltat, tmin, tmax, 2, knot)
+    #heightdescent = dEcompdPi(listcomp, deltat, tmin, tmax, 2, knot)
 
 
     descent =  compdescent + lambda*lengthascent +  benddescent + penalty*lengthpenalty
@@ -771,6 +809,9 @@ end
 
 # need to update/fix
 function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
+
+    # fix the width of the stitch
+    # cpt1 = fixwidth(cpt1, width)
 
     # gets all the data for the original input curves
     oldenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
@@ -799,6 +840,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         length = totallength(fordEbend,0.01,5)
 
         # control points for x-direction of curve
+        # comment out the descent on the first control pt to fix the width
         cpt101 = cpt1[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, length)
         cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 1, 2, lambda, length)
         cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 1, 3, lambda, length)
