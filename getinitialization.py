@@ -15,7 +15,7 @@ data = np.loadtxt('forcpt.dat')
 data1 = data[:-1] #all but last
 data2 = data[1:] #starting from 1
 
-distance = np.sum(np.square(np.subtract(data2,data1)),1)
+distance = np.sqrt(np.sum(np.square(np.subtract(data2,data1)),1))
 totallength = np.sum(distance)
 
 ratio = 5/totallength
