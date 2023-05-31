@@ -4,7 +4,7 @@ zero-force simulation
 st the box dimensions are variable
 S.E. Gonzalez
 written May 22 2023
-updated May 24 2023
+updated May 31 2023
 =#
 
 #=
@@ -20,16 +20,16 @@ using BSplines, Plots, LinearAlgebra, CSV, DataFrames
 Material Constants
 
 =#
-B = 0.1
-k = 5
-p = 3.2
-rcore = 0.02
-ryarn = 0.1
-stitchlength = 12
+B = 0.045
+k = 0.0006
+p = 2.4
+rcore = 0.325
+ryarn = 0.74
+stitchlength = 10.4
 targetlength = stitchlength/2
 
-width = 0
-height = 0
+width = 2.75
+height = 1.827
 
 # this is the penalty for the length constraint
 penalty = 10
@@ -44,18 +44,26 @@ Import the initial configuration
 # ALL THE SPLINES HAVE THE SAME BASIS
 basis = BSplineBasis(5, 0:5)
 
-# import the data to make the curve
-initialcurve = CSV.read("filename.csv")
+# # import the data to make the curve
+# initialcurve = CSV.read("filename.csv")
 
-# make an initial spline to represent the imported curve
-spl = approximate() # okay so I can't get this to work rn so maybe just import the initial control points?
-# alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
+# # make an initial spline to represent the imported curve
+# spl = approximate() # okay so I can't get this to work rn so maybe just import the initial control points?
+# # alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
 
 # initial control points
 # nine for each dimension
-xpoints = []
-ypoints = []
-zpoints = []
+xpoints = [-1.375, -1.13737,-0.507188,-0.132496,-0.697699,-1.25419,-0.866245,-0.232818,0]
+ypoints = [ -0.729454,-0.762584,-0.601069,-0.00151697,0.964803,1.93183,2.52695,2.6823,2.64747]
+zpoints = [0.0,-0.020839,-0.092625,-0.728168,-1.118904,-0.717988,-0.084468,-0.019478,0.000435]
+
+# plot initial curve
+xspline = Spline(basis, xpoints)
+yspline = Spline(basis, ypoints)
+zspline = Spline(basis, zpoints)
+curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+png(plotcurve, "initialcurve.png")
 
 #=
 
@@ -841,7 +849,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
         # control points for x-direction of curve
         # comment out the descent on the first control pt to fix the width
-        cpt101 = cpt1[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, length)
+        cpt101 = cpt1[1] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, length)
         cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 1, 2, lambda, length)
         cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 1, 3, lambda, length)
         cpt104 = cpt1[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 1, 4, lambda, length)
@@ -854,7 +862,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
         cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105, cpt106, cpt107, cpt108, cpt109]
 
-        width = cpt108 - cpt101
+        width = 2*(cpt108 - cpt101)
 
         # control points for y-direction of curve
         cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 2, 1, lambda, length)
