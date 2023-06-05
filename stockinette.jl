@@ -28,11 +28,17 @@ ryarn = 0.74
 stitchlength = 10.4
 targetlength = stitchlength/2
 
-width = 2.75
-height = 1.827
+width = 2.74
+height = 1.829
 
 # this is the penalty for the length constraint
 penalty = 10
+
+# number of subdivisions per t=1 unit for contact calculations
+cdeltat = 0.1
+
+# number of subdivisions per t=1 unit for bending calculations
+deltat = 0.001
 
 #=
 
@@ -53,17 +59,17 @@ basis = BSplineBasis(5, 0:5)
 
 # initial control points
 # nine for each dimension
-xpoints = [-1.375, -1.13737,-0.507188,-0.132496,-0.697699,-1.25419,-0.866245,-0.232818,0]
-ypoints = [ -0.729454,-0.762584,-0.601069,-0.00151697,0.964803,1.93183,2.52695,2.6823,2.64747]
-zpoints = [0.0,-0.020839,-0.092625,-0.728168,-1.118904,-0.717988,-0.084468,-0.019478,0.000435]
+xpoints =  [-1.34456, -1.13341, -0.512545, -0.125985, -0.690772, -1.24648, -0.846774, -0.223135, 0]
+ypoints = [-0.681032, -0.713483, -0.572464, -0.0162971, 0.920295, 1.85729, 2.40882, 2.54411, 2.51039]
+zpoints = [0.0, -0.023869, -0.082746, -0.725472, -1.12123, -0.715115, -0.074672, -0.022724,  0.000478]
 
 # plot initial curve
-xspline = Spline(basis, xpoints)
-yspline = Spline(basis, ypoints)
-zspline = Spline(basis, zpoints)
-curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
-plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
-png(plotcurve, "initialcurve.png")
+# xspline = Spline(basis, xpoints)
+# yspline = Spline(basis, ypoints)
+# zspline = Spline(basis, zpoints)
+# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+# png(plotcurve, "initialcurve.png")
 
 #=
 
@@ -135,7 +141,7 @@ Bending
 =#
 
 # function to calculate bending energy
-function bending(dcurve, ddcurve, dbasis, ddbasis, deltat)
+function bending(dcurve, ddcurve, dbasis, ddbasis)
     # bendingenergy = B*sum(k^2)/2 over curve
 
     bending = []
@@ -174,7 +180,7 @@ end
 # dimension is x=1,y=2,z=3
 # knot indicates the corrleted basis function
 # tmin and tmax determine the scope of the control point wrt the parameterization
-function dEbenddPi(lista, deltat, tmin, tmax, dimension, knot)
+function dEbenddPi(lista, tmin, tmax, dimension, knot)
     dEbendlist = []
 
     list = []
@@ -212,6 +218,7 @@ function dEbenddPi(lista, deltat, tmin, tmax, dimension, knot)
 
         secondterm = list[i][13]^2*secondtermnum/(list[i][12]^2)
 
+        # two in denominator is the 1/2 from B/2 in bending def
         dEbend = B*deltat*(2*firstterm - 5*secondterm)/(2*list[i][12]^5)
         push!(dEbendlist, dEbend)
     end
@@ -244,7 +251,7 @@ function floof(dist)
         f = force(zeta)
     else
         v = pot(EPS) + 100 * ((dist - (inner_dia + EPS*dia_diff))/(inner_dia + EPS*dia_diff))^2
-        f = force(zeta) + 100 * ((dist - (inner_dia + EPS*dia_diff))/(inner_dia + EPS*dia_diff))^2
+        f = force(EPS) + 100 * ((dist - (inner_dia + EPS*dia_diff))/(inner_dia + EPS*dia_diff))^2
     end
 
     return [v,f]
@@ -266,7 +273,7 @@ end
 # THIS IS THE ONLY PLACE YOU NEED TO DO THE TRANSLATE AND MIRROR STUFF
 # FOR DECOMPDPI THAT WILL BE TAKEN INTO CONSIDERATION HERE
 # calculates the total compression and sets up for things needed in the gradient descent
-function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
+function compression(curve, dcurve, thebasis, dbasis, height, width)
     # deltat gives the number of subdivisions; 0.01 gives 100 subdivisions for each bezier curve
     totcompeng = 0
 
@@ -292,64 +299,123 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
 
     # find all the contacts
     for i in 1:length(curve)
-        normdr1 = norm(dcurve1[i])
+        normdr1 = norm(dcurve[i])
 
         # position
-        r1x = curve1[i][1]
-        r1y = curve1[i][2]
-        r1z = curve1[i][3]
+        r1x = curve[i][1]
+        r1y = curve[i][2]
+        r1z = curve[i][3]
 
         # derivative of the curve along all points
-        dr1x = dcurve1[i][1]
-        dr1y = dcurve1[i][2]
-        dr1z = dcurve1[i][3]
+        dr1x = dcurve[i][1]
+        dr1y = dcurve[i][2]
+        dr1z = dcurve[i][3]
+
+        wtf = []
+
+        # self contacts
+        for j in 1:length(curve)
+            selfenergy = 0
+            t1 = curve[i][4]
+            t2 = curve[j][4]
+            if abs(t1-t2) > 1 && t1 < t2 #prevents double counting
+                normdr2 = norm(dcurve[j])
+
+                # positions
+                r2x = curve[j][1]
+                r2y = curve[j][2]
+                r2z = curve[j][3]
+
+                # derivatives
+                dr2x = dcurve[j][1]
+                dr2y = dcurve[j][2]
+                dr2z = dcurve[j][3]
+
+                # gives the t location for each point on each curve
+                t1 = curve[i][4]
+                t2 = curve[j][4]
+
+                # distance between the points on each curve
+                dist = distance(curve[i], curve[j])
+
+                if dist <= 2.1*ryarn
+                    push!(wtf, [dist, t1, t2])
+                    contact = floof(dist)
+
+                    # to get potential energy, multiply the energy density by an area and then the coord transform
+                    potentialdensity = contact[1]
+                    potential = potentialdensity*normdr1*normdr2*cdeltat^2
+                    
+                    # this forcemag is still a density
+                    forcemag = contact[2]
+
+                    # direction of the force
+                    rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
+                    rhat = rhat./dist
+
+                    
+                    totcompeng += potential
+                    selfenergy += potential
+
+                    # for use in computing dE/dP_I
+                    # force on left side
+                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
+                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    # force on right side
+                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
+                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                end
+            end
+        end
 
         # contacts with right side
         for j in 1:length(right00)
-            normdr2 = norm(rightdcurve[j])
+            if right00[j][4] <= 3.5 #t2<3.5
+                normdr2 = norm(rightdcurve[j])
 
-            # positions
-            r2x = right00[j][1]
-            r2y = right00[j][2]
-            r2z = right00[j][3]
+                # positions
+                r2x = right00[j][1]
+                r2y = right00[j][2]
+                r2z = right00[j][3]
 
-            # derivatives
-            dr2x = rightdcurve[j][1]
-            dr2y = rightdcurve[j][2]
-            dr2z = rightdcurve[j][3]
+                # derivatives
+                dr2x = rightdcurve[j][1]
+                dr2y = rightdcurve[j][2]
+                dr2z = rightdcurve[j][3]
 
-            # gives the t location for each point on each curve
-            t1 = curve[i][4]
-            t2 = right00[j][4]
+                # gives the t location for each point on each curve
+                t1 = curve[i][4]
+                t2 = right00[j][4]
 
-            # distance between the points on each curve
-            dist = distance(curve1[i], right00[j])
+                # distance between the points on each curve
+                dist = distance(curve[i], right00[j])
 
-            if dist <= 2.1*ryarn
-                contact = floof(dist)
+                if dist <= 2.1*ryarn
+                    contact = floof(dist)
 
-                # to get potential energy, multiply the energy density by an area and then the coord transform
-                potentialdensity = contact[1]
-                potential = potentialdensity*normdr1*normdr2*deltat^2
-                
-                # this forcemag is still a density
-                forcemag = contact[2]
+                    # to get potential energy, multiply the energy density by an area and then the coord transform
+                    potentialdensity = contact[1]
+                    potential = potentialdensity*normdr1*normdr2*cdeltat^2
+                    
+                    # this forcemag is still a density
+                    forcemag = contact[2]
 
-                # direction of the force
-                rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
-                rhat = rhat./dist
+                    # direction of the force
+                    rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
+                    rhat = rhat./dist
 
-                
-                totcompeng += potential
+                    
+                    totcompeng += potential
 
 
-                # for use in computing dE/dP_I
-                # force on left side
-                push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
-                thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
-                # force on right side
-                push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
-                thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    # for use in computing dE/dP_I
+                    # force on left side
+                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
+                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    # force on right side
+                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
+                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                end
             end
         end
         
@@ -372,14 +438,14 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
             t2 = left01[j][4]
 
             # distance between the points on each curve
-            dist = distance(curve1[i], left01[j])
+            dist = distance(curve[i], left01[j])
 
             if dist <= 2.1*ryarn
                 contact = floof(dist)
 
                 # to get potential energy, multiply the energy density by an area and then the coord transform
                 potentialdensity = contact[1]
-                potential = potentialdensity*normdr1*normdr2*deltat^2
+                potential = potentialdensity*normdr1*normdr2*cdeltat^2
                 
                 # this forcemag is still a density
                 forcemag = contact[2]
@@ -436,14 +502,14 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
             t2 = left02[j][4]
 
             # distance between the points on each curve
-            dist = distance(curve1[i], left02[j])
+            dist = distance(curve[i], left02[j])
 
             if dist <= 2.1*ryarn
                 contact = floof(dist)
 
                 # to get potential energy, multiply the energy density by an area and then the coord transform
                 potentialdensity = contact[1]
-                potential = potentialdensity*normdr1*normdr2*deltat^2
+                potential = potentialdensity*normdr1*normdr2*cdeltat^2
                 
                 # this forcemag is still a density
                 forcemag = contact[2]
@@ -482,48 +548,49 @@ function compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
 
         # contacts with left 1, right side of stitch
         for j in 1:length(right_10)
-            normdr2 = norm(rightdcurve[j])
+            if right_10[j][4] >= 1.5 #t2>=1.5
+                normdr2 = norm(rightdcurve[j])
 
-            # positions
-            r2x = right_10[j][1]
-            r2y = right_10[j][2]
-            r2z = right_10[j][3]
+                # positions
+                r2x = right_10[j][1]
+                r2y = right_10[j][2]
+                r2z = right_10[j][3]
 
-            # derivatives
-            dr2x = rightdcurve[j][1]
-            dr2y = rightdcurve[j][2]
-            dr2z = rightdcurve[j][3]
+                # derivatives
+                dr2x = rightdcurve[j][1]
+                dr2y = rightdcurve[j][2]
+                dr2z = rightdcurve[j][3]
 
-            # gives the t location for each point on each curve
-            t1 = curve[i][4]
-            t2 = right_10[j][4]
+                # gives the t location for each point on each curve
+                t1 = curve[i][4]
+                t2 = right_10[j][4]
 
-            # distance between the points on each curve
-            dist = distance(curve1[i], right_10[j])
+                # distance between the points on each curve
+                dist = distance(curve[i], right_10[j])
 
-            if dist <= 2.1*ryarn
-                contact = floof(dist)
+                if dist <= 2.1*ryarn
+                    contact = floof(dist)
 
-                # to get potential energy, multiply the energy density by an area and then the coord transform
-                potentialdensity = contact[1]
-                potential = potentialdensity*normdr1*normdr2*deltat^2
-                
-                # this forcemag is still a density
-                forcemag = contact[2]
+                    # to get potential energy, multiply the energy density by an area and then the coord transform
+                    potentialdensity = contact[1]
+                    potential = potentialdensity*normdr1*normdr2*cdeltat^2
+                    
+                    # this forcemag is still a density
+                    forcemag = contact[2]
 
-                # direction of the force
-                rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
-                rhat = rhat./dist
+                    # direction of the force
+                    rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
+                    rhat = rhat./dist
 
-                totcompeng += potential
+                    totcompeng += potential
 
-                # for use in computing dE/dP_I
-                push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
-                thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    # for use in computing dE/dP_I
+                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
+                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                end
             end
         end
     end
-
     return totcompeng, fordEcomp
 end
 
@@ -536,7 +603,7 @@ end
 
 
 # DOES THIS CHANGE????? YES CAUSE OF THE CURVENUMBER
-function dEcompdPi(list, deltat, tmin, tmax, dimension, knot)
+function dEcompdPi(list, tmin, tmax, dimension, knot)
     if length(list) == 0
         return 0
     else
@@ -595,7 +662,7 @@ function dEcompdPi(list, deltat, tmin, tmax, dimension, knot)
             secondterm = relevantdata[i][13]*(secondterm1 + secondterm2)
 
             # deltat is squared because you are summing over both curves
-            dEdP = deltat^2*(firstterm + secondterm)
+            dEdP = cdeltat^2*(firstterm + secondterm)
 
             push!(dEcomp, dEdP)
         end
@@ -617,7 +684,7 @@ Length
 
 =#
 # gives length of left half
-function totallength(list, deltat, tmax)
+function totallength(list, tmax)
     # list should be fordEbend
     # tmax is just the last value of the parameterization
     dL = []
@@ -636,7 +703,7 @@ end
 # list should be fordEbend, knot is the part of the curve changed by the control point
 # dimension x=1 y=2 z=3
 # tmin and tmax give the part of the parameterization affected by the control point
-function dLdPi(list, deltat, tmin, tmax, dimension, knot, currentlength)
+function dLdPi(list, tmin, tmax, dimension, knot, currentlength)
 
     relevant = []
 
@@ -690,25 +757,25 @@ function constructbasis5(basis, deltat, tmin, tmax, d)
     if tmin<=1 && tmax>=2
         for t in units:(2*units-1)
             autobasis = bsplines(basis, deltat*t, Derivative(d))
-            push!(basislist,[0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0, 0, 0])
+            push!(basislist,[0, autobasis[2], autobasis[3], autobasis[4], autobasis[5], autobasis[6], 0, 0, 0])
         end
     end
     if tmin<=2 && tmax>=3
         for t in 2*units:(3*units-1)
             autobasis = bsplines(basis, deltat*t, Derivative(d))
-            push!(basislist,[0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0, 0])
+            push!(basislist,[0, 0, autobasis[3], autobasis[4], autobasis[5], autobasis[6], autobasis[7], 0, 0])
         end
     end
     if tmin<=3 && tmax>=4
         for t in 3*units:(4*units-1)
             autobasis = bsplines(basis, deltat*t, Derivative(d))
-            push!(basislist,[0, 0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5], 0])
+            push!(basislist,[0, 0, 0, autobasis[4], autobasis[5], autobasis[6], autobasis[7], autobasis[8], 0])
         end
     end
     if tmin<=4 && tmax>=5
         for t in 4*units:5*units
             autobasis = bsplines(basis, deltat*t, Derivative(d))
-            push!(basislist,[0, 0, 0, 0, autobasis[1], autobasis[2], autobasis[3], autobasis[4], autobasis[5]])
+            push!(basislist,[0, 0, 0, 0, autobasis[5], autobasis[6], autobasis[7], autobasis[8], autobasis[9]])
         end
     end
 
@@ -723,15 +790,9 @@ Stitch Energy
 
 =#
 
-# gives energy of the left half of the stitch
-function totalenergy(cpt1, cpt2, cpt3, height, width)
-    # contructs the splines
-    spline1 = Spline(basis, cpt1)
-    spline2 = Spline(basis, cpt2)
-    spline3 = Spline(basis, cpt3)
-
+function findbendingenergy(spline1, spline2, spline3)
     # gets values for the curve positions, and 1st 2nd derivatives
-    curve = [[spline1(t), spline2(t), spline3(t)] for t in 0:deltat:5]
+    curve = [[spline1(t), spline2(t), spline3(t), t] for t in 0:deltat:5]
     dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), spline3(t, Derivative(1))] for t in 0:deltat:5]
     ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), spline3(t, Derivative(2))] for t in 0:deltat:5]
 
@@ -741,52 +802,52 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
     ddbasis = constructbasis5(basis, deltat, 0, 5, 2)
 
     #computes bending energy for curve
-    bending = bending(dcurve, ddcurve, dbasis, ddbasis, deltat)
+    bendinge = bending(dcurve, ddcurve, dbasis, ddbasis)
     # println("bending")
-    # println(bending[1])
-
-    # computes compression energy
-    contact = compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
-    #println("contact")
-    #println(contact[1])
-
-    energy = contact[1] + bending[1]
-
-    return energy, bending[2], contact[2]
+    # println(bendinge[1])
+    return bendinge
 end
 
-# just prints the components of the energy for after the sim has run
-# GIVES ENERGY OF TOTAL STITCH, NOT JUST HALF OF IT
-function printtotalenergy(cpt1, cpt2, cpt3, height, width)
+function findcontactenergy(spline1, spline2, spline3, height, width)
+    # gets values for the curve positions, and 1st 2nd derivatives
+    curve = [[spline1(t), spline2(t), spline3(t), t] for t in 0:cdeltat:5]
+    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), spline3(t, Derivative(1))] for t in 0:cdeltat:5]
+    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), spline3(t, Derivative(2))] for t in 0:cdeltat:5]
+
+    # gets values of the basis functions and their derivatives at every point
+    thebasis = constructbasis5(basis, cdeltat, 0, 5, 0)
+    dbasis = constructbasis5(basis, cdeltat, 0, 5, 1)
+    ddbasis = constructbasis5(basis, cdeltat, 0, 5, 2)
+
+    # computes compression energy
+    contact = compression(curve, dcurve, thebasis, dbasis, height, width)
+    # println("contact")
+    # println(contact[1])
+end
+
+# gives energy of the left half of the stitch
+function totalenergy(cpt1, cpt2, cpt3, height, width)
     # contructs the splines
     spline1 = Spline(basis, cpt1)
     spline2 = Spline(basis, cpt2)
     spline3 = Spline(basis, cpt3)
 
-    # gets values for the curve positions, and 1st 2nd derivatives
-    curve = [[spline1(t), spline2(t), spline3(t)] for t in 0:deltat:5]
-    dcurve = [[spline1(t, Derivative(1)), spline2(t, Derivative(1)), spline3(t, Derivative(1))] for t in 0:deltat:5]
-    ddcurve = [[spline1(t, Derivative(2)), spline2(t, Derivative(2)), spline3(t, Derivative(2))] for t in 0:deltat:5]
+    bendinge = findbendingenergy(spline1, spline2, spline3)
+    contact = findcontactenergy(spline1, spline2, spline3, height, width)
 
-    # gets values of the basis functions and their derivatives at every point
-    # need to fix
-    thebasis = constructbasis5(basis, deltat, 0, 5, 0)
-    dbasis = constructdbasis5(basis, deltat, 0, 5, 1)
-    ddbasis = constructddbasis5(basis, deltat, 0, 5, 2)
+    energy = contact[1] + bendinge[1]
 
-    #computes bending energy for curve
-    # muplitply by two cause it's only doing the left half
-    bending = 2*bending(dcurve, ddcurve, dbasis, ddbasis, deltat)
-    println("bending")
-    println(bending[1])
+    # prints out the total energy of the entire stitch
+    if converged == true
+        println("bending")
+        println(2*bendinge[1])
+        println("contact")
+        println(2*contact[1])
+        println("total energy")
+        println(2*energy)
+    end
 
-    # computes compression energy
-    contact = 2*compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
-    println("contact")
-    println(contact[1])
-
-    energy = contact[1] + bending[1]
-    println(energy)
+    return energy, bendinge[2], contact[2]
 end
 
 
@@ -798,10 +859,10 @@ Descent
 
 # HERE IS WHERE THE DESCENT IS DEFINED
 # need to do something for the height
-function descent(listbend, listcomp, deltat, tmin, tmax, dimension, knot, lambda, length)
-    benddescent = dEbenddPi(listbend, deltat, tmin, tmax, dimension, knot)
-    compdescent = dEcompdPi(listcomp, deltat, tmin, tmax, dimension, knot)
-    lengthstuff = dLdPi(listbend, deltat, tmin, tmax, dimension, knot, length)
+function descent(listbend, listcomp, tmin, tmax, dimension, knot, lambda, length)
+    benddescent = dEbenddPi(listbend, tmin, tmax, dimension, knot)
+    compdescent = dEcompdPi(listcomp, tmin, tmax, dimension, knot)
+    lengthstuff = dLdPi(listbend, tmin, tmax, dimension, knot, length)
     lengthascent = lengthstuff[1]
     lengthpenalty = lengthstuff[2]
 
@@ -827,7 +888,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     fordEcomp = oldenergy[3]
     oldenergy = oldenergy[1]
 
-    oglength = totallength(fordEbend,0.01,5)
+    oglength = totallength(fordEbend,deltat,5)
 
     println("Here is the original energy")
     println(oldenergy)
@@ -845,19 +906,19 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     while converged == false
 
-        length = totallength(fordEbend,0.01,5)
+        length = totallength(fordEbend,deltat,5)
 
         # control points for x-direction of curve
         # comment out the descent on the first control pt to fix the width
-        cpt101 = cpt1[1] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 1, 1, lambda, length)
-        cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 1, 2, lambda, length)
-        cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 1, 3, lambda, length)
-        cpt104 = cpt1[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 1, 4, lambda, length)
-        cpt105 = cpt1[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 1, 5, lambda, length)
-        cpt106 = cpt1[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 1, 6, lambda, length)
-        cpt107 = cpt1[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 1, 7, lambda, length)
-        cpt108 = cpt1[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 1, 8, lambda, length)
-        cpt108 = cpt1[9] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 1, 9, lambda, length)
+        cpt101 = cpt1[1] #-learn_rate*descent(fordEbend, fordEcomp, 0, 1, 1, 1, lambda, length)
+        cpt102 = cpt1[2] -learn_rate*descent(fordEbend, fordEcomp, 0, 2, 1, 2, lambda, length)
+        cpt103 = cpt1[3] -learn_rate*descent(fordEbend, fordEcomp, 0, 3, 1, 3, lambda, length)
+        cpt104 = cpt1[4] -learn_rate*descent(fordEbend, fordEcomp, 0, 4, 1, 4, lambda, length)
+        cpt105 = cpt1[5] -learn_rate*descent(fordEbend, fordEcomp, 0, 5, 1, 5, lambda, length)
+        cpt106 = cpt1[6] -learn_rate*descent(fordEbend, fordEcomp, 1, 5, 1, 6, lambda, length)
+        cpt107 = cpt1[7] -learn_rate*descent(fordEbend, fordEcomp, 2, 5, 1, 7, lambda, length)
+        cpt108 = cpt1[8] -learn_rate*descent(fordEbend, fordEcomp, 3, 5, 1, 8, lambda, length)
+        cpt108 = cpt1[9] #-learn_rate*descent(fordEbend, fordEcomp, 4, 5, 1, 9, lambda, length)
         # last control point of x should be 0 and stay 0
 
         cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105, cpt106, cpt107, cpt108, cpt109]
@@ -865,28 +926,28 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         width = 2*(cpt108 - cpt101)
 
         # control points for y-direction of curve
-        cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 2, 1, lambda, length)
-        cpt202 = cpt2[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 2, 2, lambda, length)
-        cpt203 = cpt2[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 2, 3, lambda, length)
-        cpt204 = cpt2[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 2, 4, lambda, length)
-        cpt205 = cpt2[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 2, 5, lambda, length)
-        cpt206 = cpt2[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 2, 6, lambda, length)
-        cpt207 = cpt2[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 2, 7, lambda, length)
-        cpt208 = cpt2[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 2, 8, lambda, length)
-        cpt209 = cpt2[9] -learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 2, 9, lambda, length)
+        cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, 0, 1, 2, 1, lambda, length)
+        cpt202 = cpt2[2] -learn_rate*descent(fordEbend, fordEcomp, 0, 2, 2, 2, lambda, length)
+        cpt203 = cpt2[3] -learn_rate*descent(fordEbend, fordEcomp, 0, 3, 2, 3, lambda, length)
+        cpt204 = cpt2[4] -learn_rate*descent(fordEbend, fordEcomp, 0, 4, 2, 4, lambda, length)
+        cpt205 = cpt2[5] -learn_rate*descent(fordEbend, fordEcomp, 0, 5, 2, 5, lambda, length)
+        cpt206 = cpt2[6] -learn_rate*descent(fordEbend, fordEcomp, 1, 5, 2, 6, lambda, length)
+        cpt207 = cpt2[7] -learn_rate*descent(fordEbend, fordEcomp, 2, 5, 2, 7, lambda, length)
+        cpt208 = cpt2[8] -learn_rate*descent(fordEbend, fordEcomp, 3, 5, 2, 8, lambda, length)
+        cpt209 = cpt2[9] -learn_rate*descent(fordEbend, fordEcomp, 4, 5, 2, 9, lambda, length)
 
         cpt2 = [cpt201, cpt202, cpt203, cpt204, cpt205, cpt206, cpt207, cpt208, cpt209]
 
         # control points for z-direction of curve
         cpt301 = cpt3[1] #-learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 1, 3, 1, lambda, length)
-        cpt302 = cpt3[2] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 2, 3, 2, lambda, length)
-        cpt303 = cpt3[3] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 3, 3, 3, lambda, length)
-        cpt304 = cpt3[4] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 4, 3, 4, lambda, length)
-        cpt305 = cpt3[5] -learn_rate*descent(fordEbend, fordEcomp, deltat, 0, 5, 3, 5, lambda, length)
-        cpt306 = cpt3[6] -learn_rate*descent(fordEbend, fordEcomp, deltat, 1, 5, 3, 6, lambda, length)
-        cpt307 = cpt3[7] -learn_rate*descent(fordEbend, fordEcomp, deltat, 2, 5, 3, 7, lambda, length)
-        cpt308 = cpt3[8] -learn_rate*descent(fordEbend, fordEcomp, deltat, 3, 5, 3, 8, lambda, length)
-        cpt309 = cpt3[9] -learn_rate*descent(fordEbend, fordEcomp, deltat, 4, 5, 3, 9, lambda, length)
+        cpt302 = cpt3[2] -learn_rate*descent(fordEbend, fordEcomp, 0, 2, 3, 2, lambda, length)
+        cpt303 = cpt3[3] -learn_rate*descent(fordEbend, fordEcomp, 0, 3, 3, 3, lambda, length)
+        cpt304 = cpt3[4] -learn_rate*descent(fordEbend, fordEcomp, 0, 4, 3, 4, lambda, length)
+        cpt305 = cpt3[5] -learn_rate*descent(fordEbend, fordEcomp, 0, 5, 3, 5, lambda, length)
+        cpt306 = cpt3[6] -learn_rate*descent(fordEbend, fordEcomp, 1, 5, 3, 6, lambda, length)
+        cpt307 = cpt3[7] -learn_rate*descent(fordEbend, fordEcomp, 2, 5, 3, 7, lambda, length)
+        cpt308 = cpt3[8] -learn_rate*descent(fordEbend, fordEcomp, 3, 5, 3, 8, lambda, length)
+        cpt309 = cpt3[9] -learn_rate*descent(fordEbend, fordEcomp, 4, 5, 3, 9, lambda, length)
         # first control point of z should be 0 and stay 0
 
         cpt3 = [cpt301, cpt302, cpt303, cpt304, cpt305, cpt306, cpt307, cpt308, cpt309]
@@ -902,7 +963,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         println(iterations)
 
         #gradient ascent part for the length constraint
-        lambda = lambda + (totallength(fordEbend,0.01,5) - targetlength)
+        lambda = lambda + (totallength(fordEbend,deltat,5) - targetlength)
 
         if abs(oldenergy - newenergy) <= conv_threshold
             converged = true
@@ -926,7 +987,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     end
 
     println("here is the end length of curve")
-    println(totallength(fordEbend,0.01,5))
+    println(totallength(fordEbend,deltat,5))
 
     println("Here are the new control points")
 
@@ -936,7 +997,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     println("Here is the energy breakdown:")
 
-    printtotalenergy(cpt1, cpt2, cpt3, height, width)
+    totalenergy(cpt1, cpt2, cpt3, height, width)
 
     return cpt1, cpt2, cpt3
 end
@@ -948,13 +1009,16 @@ Where the code actually runs
 
 =#
 
-deltat = 0.01
-
-# the control point lists were defined at the very beginning
-# the last number is the max number of iterations
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.001, 0.000000001, 100000)
 
 
+converged = true
+
+energy = totalenergy(xpoints, ypoints, zpoints, height, width)
+println(energy[1])
+
+# comptest = compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
+# println(comptest[1])
+#println(minimum(comptest[2]))
 
 #=
 
@@ -963,9 +1027,9 @@ Visualizations
 =#
 
 #Plot the finalized clasp
-xspline = Spline(basis, grad[1])
-yspline = Spline(basis, grad[2])
-zspline = Spline(basis, grad[3])
-curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
-plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
-png(plotcurve, "finalcurve.png")
+# xspline = Spline(basis, grad[1])
+# yspline = Spline(basis, grad[2])
+# zspline = Spline(basis, grad[3])
+# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+# png(plotcurve, "finalcurve.png")
