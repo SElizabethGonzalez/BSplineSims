@@ -23,12 +23,12 @@ Material Constants
 B = 0.045
 k = 0.0006
 p = 2.4
-rcore = 0.325
+rcore = 0.3
 ryarn = 0.74
 stitchlength = 10.4
 targetlength = stitchlength/2
 
-width = 2.74
+width = 2.68
 height = 1.829
 
 # this is the penalty for the length constraint
@@ -39,6 +39,8 @@ cdeltat = 0.1
 
 # number of subdivisions per t=1 unit for bending calculations
 deltat = 0.001
+
+converged = false
 
 #=
 
@@ -59,7 +61,7 @@ basis = BSplineBasis(5, 0:5)
 
 # initial control points
 # nine for each dimension
-xpoints =  [-1.34456, -1.13341, -0.512545, -0.125985, -0.690772, -1.24648, -0.846774, -0.223135, 0]
+xpoints =  [-1.34, -1.13341, -0.512545, -0.125985, -0.690772, -1.24648, -0.846774, -0.223135, 0]
 ypoints = [-0.681032, -0.713483, -0.572464, -0.0162971, 0.920295, 1.85729, 2.40882, 2.54411, 2.51039]
 zpoints = [0.0, -0.023869, -0.082746, -0.725472, -1.12123, -0.715115, -0.074672, -0.022724,  0.000478]
 
@@ -297,6 +299,18 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
     # right indicates that it's the right side of the stitch
     right_10 = translatex(right00, width, -1)
 
+    # list = []
+
+    # println("first point in curve")
+    # println(curve[1])
+    # println("last point in curve")
+    # println(curve[end])
+
+    # println("first point in right_10")
+    # println(right_10[1])
+    # println("last point in right_10")
+    # println(right_10[end])
+
     # find all the contacts
     for i in 1:length(curve)
         normdr1 = norm(dcurve[i])
@@ -361,9 +375,12 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                     # force on left side
                     push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
                     thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
-                    # force on right side
-                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
-                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    
+                    # DOES INCLUDING THIS FORCE DOUBLECOUNTING??
+
+                    # # force on right side
+                    # push!(fordEcomp, [t2,normdr2,dr2x,dr2y,dr2z,t1,normdr1,dr1x,dr1y,dr1z,forcemag,-1*rhat,potentialdensity, 
+                    # thebasis[j], dbasis[j], thebasis[i], dbasis[j],r2x, r2y, r2z, r1x, r1y, r1z])
                 end
             end
         end
@@ -412,9 +429,11 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                     # force on left side
                     push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,rhat,potentialdensity, 
                     thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
-                    # force on right side
-                    push!(fordEcomp, [t1,normdr1,dr1x,dr1y,dr1z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
-                    thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
+                    
+                    #WOULD THIS CAUSE DOUBLE COUNTING??
+                    # # force on right side
+                    # push!(fordEcomp, [t2,normdr2,dr2x,dr2y,dr2z,t2,normdr2,dr2x,dr2y,dr2z,forcemag,-1*rhat,potentialdensity, 
+                    # thebasis[i], dbasis[i], thebasis[j], dbasis[j],r1x, r1y, r1z, r2x, r2y, r2z])
                 end
             end
         end
@@ -569,6 +588,7 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                 dist = distance(curve[i], right_10[j])
 
                 if dist <= 2.1*ryarn
+                    # push!(list,dist)
                     contact = floof(dist)
 
                     # to get potential energy, multiply the energy density by an area and then the coord transform
@@ -591,6 +611,8 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
             end
         end
     end
+    # println(length(list))
+    # println(minimum(list))
     return totcompeng, fordEcomp
 end
 
@@ -598,11 +620,6 @@ end
 # tmin and tmax are the bounds of the parameter affected by the control point
 # dimension is x=1,y=2,z=3
 # knot indicates which basis function is affected by the control point
-# curvenumber is literally an identifying for which curve is being affected
-# remember that the og compression fnc sweeps over curve1 then curve2
-
-
-# DOES THIS CHANGE????? YES CAUSE OF THE CURVENUMBER
 function dEcompdPi(list, tmin, tmax, dimension, knot)
     if length(list) == 0
         return 0
@@ -888,7 +905,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     fordEcomp = oldenergy[3]
     oldenergy = oldenergy[1]
 
-    oglength = totallength(fordEbend,deltat,5)
+    oglength = totallength(fordEbend,5)
 
     println("Here is the original energy")
     println(oldenergy)
@@ -899,14 +916,14 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     println("here is the og length of curve")
     println(oglength)
 
-    lambda = 0.001
+    lambda = 0.0001
 
     converged = false
     iterations = 0
 
     while converged == false
 
-        length = totallength(fordEbend,deltat,5)
+        length = totallength(fordEbend,5)
 
         # control points for x-direction of curve
         # comment out the descent on the first control pt to fix the width
@@ -918,12 +935,12 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         cpt106 = cpt1[6] -learn_rate*descent(fordEbend, fordEcomp, 1, 5, 1, 6, lambda, length)
         cpt107 = cpt1[7] -learn_rate*descent(fordEbend, fordEcomp, 2, 5, 1, 7, lambda, length)
         cpt108 = cpt1[8] -learn_rate*descent(fordEbend, fordEcomp, 3, 5, 1, 8, lambda, length)
-        cpt108 = cpt1[9] #-learn_rate*descent(fordEbend, fordEcomp, 4, 5, 1, 9, lambda, length)
+        cpt109 = cpt1[9] #-learn_rate*descent(fordEbend, fordEcomp, 4, 5, 1, 9, lambda, length)
         # last control point of x should be 0 and stay 0
 
         cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105, cpt106, cpt107, cpt108, cpt109]
 
-        width = 2*(cpt108 - cpt101)
+        width = 2*(cpt109 - cpt101)
 
         # control points for y-direction of curve
         cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, 0, 1, 2, 1, lambda, length)
@@ -963,7 +980,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         println(iterations)
 
         #gradient ascent part for the length constraint
-        lambda = lambda + (totallength(fordEbend,deltat,5) - targetlength)
+        lambda = lambda + (totallength(fordEbend,5) - targetlength)
 
         if abs(oldenergy - newenergy) <= conv_threshold
             converged = true
@@ -987,7 +1004,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     end
 
     println("here is the end length of curve")
-    println(totallength(fordEbend,deltat,5))
+    println(totallength(fordEbend,5))
 
     println("Here are the new control points")
 
@@ -1009,12 +1026,13 @@ Where the code actually runs
 
 =#
 
+gradientdescent(xpoints, ypoints, zpoints, 0.001, 0.000000001, 10000)
 
 
-converged = true
+# converged = true
 
-energy = totalenergy(xpoints, ypoints, zpoints, height, width)
-println(energy[1])
+# energy = totalenergy(xpoints, ypoints, zpoints, height, width)
+# println(energy[1])
 
 # comptest = compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
 # println(comptest[1])
