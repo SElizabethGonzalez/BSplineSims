@@ -36,42 +36,8 @@ penalty = 10
 
 # number of subdivisions per t=1 unit for contact calculations
 cdeltat = 0.1
-
 # number of subdivisions per t=1 unit for bending calculations
 deltat = 0.001
-
-converged = false
-
-#=
-
-Import the initial configuration
-
-=#
-# make the b spline basis st the order is 5 and it has C3 continuity
-# the second argument determines the range of t
-# ALL THE SPLINES HAVE THE SAME BASIS
-basis = BSplineBasis(5, 0:5)
-
-# # import the data to make the curve
-# initialcurve = CSV.read("filename.csv")
-
-# # make an initial spline to represent the imported curve
-# spl = approximate() # okay so I can't get this to work rn so maybe just import the initial control points?
-# # alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
-
-# initial control points
-# nine for each dimension
-xpoints =  [-1.34, -1.13341, -0.512545, -0.125985, -0.690772, -1.24648, -0.846774, -0.223135, 0]
-ypoints = [-0.681032, -0.713483, -0.572464, -0.0162971, 0.920295, 1.85729, 2.40882, 2.54411, 2.51039]
-zpoints = [0.0, -0.023869, -0.082746, -0.725472, -1.12123, -0.715115, -0.074672, -0.022724,  0.000478]
-
-# plot initial curve
-# xspline = Spline(basis, xpoints)
-# yspline = Spline(basis, ypoints)
-# zspline = Spline(basis, zpoints)
-# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
-# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
-# png(plotcurve, "initialcurve.png")
 
 #=
 
@@ -134,6 +100,46 @@ function fixwidth(xlist, idealwidth)
     newlist = xlist .* ratio
     return newlist
 end
+
+
+#=
+
+Import the initial configuration
+
+=#
+# make the b spline basis st the order is 5 and it has C3 continuity
+# the second argument determines the range of t
+# ALL THE SPLINES HAVE THE SAME BASIS
+basis = BSplineBasis(5, 0:5)
+
+# # import the data to make the curve
+# initialcurve = CSV.read("filename.csv")
+
+# # make an initial spline to represent the imported curve
+# spl = approximate() # okay so I can't get this to work rn so maybe just import the initial control points?
+# # alternatively, could use the fitting control points fnc from basicbspline.jl package BUT IT NEEDS A FUNCTION??
+
+# initial control points
+# nine for each dimension
+xpoints =  [-1.34, -1.13341, -0.512545, -0.125985, -0.690772, -1.24648, -0.846774, -0.223135, 0]
+ypoints = [-0.681032, -0.713483, -0.572464, -0.0162971, 0.920295, 1.85729, 2.40882, 2.54411, 2.51039]
+zpoints = [0.0, -0.023869, -0.082746, -0.725472, -1.12123, -0.715115, -0.074672, -0.022724,  0.000478]
+
+
+# scale the x control points so it matches the cell width
+# prevents overlapping with the compression fnc
+xpoints = fixwidth(xpoints, width/2)
+
+
+# plot initial curve
+# xspline = Spline(basis, xpoints)
+# yspline = Spline(basis, ypoints)
+# zspline = Spline(basis, zpoints)
+# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+# png(plotcurve, "initialcurve.png")
+
+
 
 
 #=
@@ -854,6 +860,21 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
 
     energy = contact[1] + bendinge[1]
 
+    return energy, bendinge[2], contact[2]
+end
+
+# gives energy of the left half of the stitch
+function totalenergy(cpt1, cpt2, cpt3, height, width, converged)
+    # contructs the splines
+    spline1 = Spline(basis, cpt1)
+    spline2 = Spline(basis, cpt2)
+    spline3 = Spline(basis, cpt3)
+
+    bendinge = findbendingenergy(spline1, spline2, spline3)
+    contact = findcontactenergy(spline1, spline2, spline3, height, width)
+
+    energy = contact[1] + bendinge[1]
+
     # prints out the total energy of the entire stitch
     if converged == true
         println("bending")
@@ -863,10 +884,7 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
         println("total energy")
         println(2*energy)
     end
-
-    return energy, bendinge[2], contact[2]
 end
-
 
 #=
 
@@ -916,7 +934,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     println("here is the og length of curve")
     println(oglength)
 
-    lambda = 0.0001
+    lambda = 0.001
 
     converged = false
     iterations = 0
@@ -1014,7 +1032,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     println("Here is the energy breakdown:")
 
-    totalenergy(cpt1, cpt2, cpt3, height, width)
+    totalenergy(cpt1, cpt2, cpt3, height, width, true)
 
     return cpt1, cpt2, cpt3
 end
@@ -1026,7 +1044,7 @@ Where the code actually runs
 
 =#
 
-gradientdescent(xpoints, ypoints, zpoints, 0.001, 0.000000001, 10000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0001, 0.00000001, 100000)
 
 
 # converged = true
@@ -1045,9 +1063,9 @@ Visualizations
 =#
 
 #Plot the finalized clasp
-# xspline = Spline(basis, grad[1])
-# yspline = Spline(basis, grad[2])
-# zspline = Spline(basis, grad[3])
-# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
-# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
-# png(plotcurve, "finalcurve.png")
+xspline = Spline(basis, grad[1])
+yspline = Spline(basis, grad[2])
+zspline = Spline(basis, grad[3])
+curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+png(plotcurve, "finalcurve.png")
