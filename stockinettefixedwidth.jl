@@ -29,7 +29,7 @@ stitchlength = 10.4
 targetlength = stitchlength/2
 
 width = 2.68
-height = 1.829
+initialheight = 1.829
 
 # this is the penalty for the length constraint
 penalty = 10
@@ -305,6 +305,9 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
     # right indicates that it's the right side of the stitch
     right_10 = translatex(right00, width, -1)
 
+
+    forheight = []
+
     # list = []
 
     # println("first point in curve")
@@ -474,10 +477,17 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                 
                 # this forcemag is still a density
                 forcemag = contact[2]
+                
 
                 # direction of the force for up
                 rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
                 rhat = rhat./dist
+
+                # isolate the force in the y-direction to determine how to best change the height
+                ycoord = [0,1,0]
+                yforce = dot(rhat, ycoord)
+                yforce = forcemag * yforce
+                push!(forheight, yforce)
 
                 # direction of the force for down
                 minusrhat = [(r1x-r2x), -1*(r1y-r2y), (r1z-r2z)]
@@ -542,6 +552,12 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                 # direction of the force for up
                 rhat = [(r1x-r2x), (r1y-r2y), (r1z-r2z)]
                 rhat = rhat./dist
+
+                # isolate the force in the y-direction to determine how to best change the height
+                ycoord = [0,1,0]
+                yforce = dot(rhat, ycoord)
+                yforce = forcemag * yforce
+                push!(forheight, yforce)
 
                 # direction of the force for down
                 minusrhat = [(r1x-r2x), -1*(r1y-r2y), (r1z-r2z)]
@@ -619,7 +635,11 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
     end
     # println(length(list))
     # println(minimum(list))
-    return totcompeng, fordEcomp
+
+    #println(sum(forheight))
+    changeheight = sum(forheight)
+
+    return totcompeng, fordEcomp, changeheight
 end
 
 # for computing the change in compression energy wrt a control point
@@ -846,6 +866,7 @@ function findcontactenergy(spline1, spline2, spline3, height, width)
     contact = compression(curve, dcurve, thebasis, dbasis, height, width)
     # println("contact")
     # println(contact[1])
+    return contact
 end
 
 # gives energy of the left half of the stitch
@@ -857,10 +878,15 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
 
     bendinge = findbendingenergy(spline1, spline2, spline3)
     contact = findcontactenergy(spline1, spline2, spline3, height, width)
+    fuckingheight = contact[3]
+    println(fuckingheight)
 
     energy = contact[1] + bendinge[1]
+    returnlist = [energy, bendinge[2], contact[2], fuckingheight]
 
-    return energy, bendinge[2], contact[2]
+    println(returnlist[4])
+
+    return returnlist
 end
 
 # gives energy of the left half of the stitch
@@ -918,10 +944,15 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     # cpt1 = fixwidth(cpt1, width)
 
     # gets all the data for the original input curves
-    oldenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
+    oldenergy = totalenergy(cpt1, cpt2, cpt3, initialheight, width)
     fordEbend = oldenergy[2]
     fordEcomp = oldenergy[3]
     oldenergy = oldenergy[1]
+
+    # println(oldenergy[4])
+
+    #olddeltaheight = oldenergy[4]
+    height = initialheight
 
     oglength = totallength(fordEbend,5)
 
@@ -958,7 +989,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
         cpt1 = [cpt101, cpt102, cpt103, cpt104, cpt105, cpt106, cpt107, cpt108, cpt109]
 
-        width = 2*(cpt109 - cpt101)
+        #width = 2*(cpt109 - cpt101)
 
         # control points for y-direction of curve
         cpt201 = cpt2[1] -learn_rate*descent(fordEbend, fordEcomp, 0, 1, 2, 1, lambda, length)
@@ -993,6 +1024,9 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         fordEcomp = newenergy[3]
         newenergy = newenergy[1]
 
+        # deltaheight = newenergy[4]
+
+
         println("here is the updated energy")
         println(newenergy)
         println(iterations)
@@ -1000,7 +1034,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         #gradient ascent part for the length constraint
         lambda = lambda + (totallength(fordEbend,5) - targetlength)
 
-        if abs(oldenergy - newenergy) <= conv_threshold
+        if abs(oldenergy - newenergy) <= conv_threshold && iterations > 1000
             converged = true
             println("We converged!")
             println("here is the new energy")
@@ -1009,6 +1043,10 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             println(iterations)
         else
             oldenergy = newenergy
+
+            #change the height
+            # height = height - learn_rate*cdeltat^2*deltaheight*olddeltaheight
+            # olddeltaheight = deltaheight
         end
 
         iterations +=1
@@ -1033,6 +1071,8 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     println("Here is the energy breakdown:")
 
     totalenergy(cpt1, cpt2, cpt3, height, width, true)
+    println("the height is:")
+    println(height)
 
     return cpt1, cpt2, cpt3
 end
@@ -1044,12 +1084,13 @@ Where the code actually runs
 
 =#
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0001, 0.00000001, 100000)
+#grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
 
 
 # converged = true
 
-# energy = totalenergy(xpoints, ypoints, zpoints, height, width)
+energy = totalenergy(xpoints, ypoints, zpoints, initialheight, width)
+println(energy[4])
 # println(energy[1])
 
 # comptest = compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
@@ -1063,9 +1104,15 @@ Visualizations
 =#
 
 #Plot the finalized clasp
-xspline = Spline(basis, grad[1])
-yspline = Spline(basis, grad[2])
-zspline = Spline(basis, grad[3])
-curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
-plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
-png(plotcurve, "finalcurve.png")
+# xspline = Spline(basis, grad[1])
+# yspline = Spline(basis, grad[2])
+# zspline = Spline(basis, grad[3])
+# curve = [[xspline(t) yspline(t) zspline(t)] for t in 0:0.01:5]
+# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y", zlabel="Z")
+# png(plotcurve, "finalcurve.png")
+
+# curve = [[xspline(t) yspline(t)] for t in 0:0.01:5]
+# plotcurve = plot(Tuple.(curve), xlabel="X", ylabel="Y")
+# png(plotcurve, "finalcurvexyplane.png")
+# fuck = (yspline(5) - yspline(4.99))/(xspline(5)-xspline(4.99))
+# println(fuck)
