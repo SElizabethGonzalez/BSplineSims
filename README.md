@@ -3,7 +3,7 @@
 
  Written by Sarah Gonzalez
  Start Date: May 22 2023
- Last Updated: 
+ Last Updated: Jul 18 2023
 
  This code follows a similar framework to the static simulations published in [this paper](https://arxiv.org/abs/2302.13467). The stitch backbone is represented as a fifth order b-spline for C3 continuity and we consider an energy functional consisting of bending and compression potentials.
 

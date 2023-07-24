@@ -29,7 +29,7 @@ stitchlength = 10.4
 targetlength = stitchlength/2
 
 width = 2.68
-initialheight = 1.829
+initialheight = 1.85
 
 # this is the penalty for the length constraint
 penalty = 10
@@ -38,6 +38,8 @@ penalty = 10
 cdeltat = 0.1
 # number of subdivisions per t=1 unit for bending calculations
 deltat = 0.001
+
+fuckingheightlist = []
 
 #=
 
@@ -879,7 +881,7 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
     bendinge = findbendingenergy(spline1, spline2, spline3)
     contact = findcontactenergy(spline1, spline2, spline3, height, width)
     fuckingheight = contact[3]
-    println(fuckingheight)
+    push!(fuckingheightlist, fuckingheight)
 
     energy = contact[1] + bendinge[1]
     returnlist = [energy, bendinge[2], contact[2], fuckingheight]
@@ -951,8 +953,9 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     # println(oldenergy[4])
 
-    #olddeltaheight = oldenergy[4]
+    olddeltaheight = fuckingheightlist[1]
     height = initialheight
+    println(olddeltaheight)
 
     oglength = totallength(fordEbend,5)
 
@@ -1024,7 +1027,8 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         fordEcomp = newenergy[3]
         newenergy = newenergy[1]
 
-        # deltaheight = newenergy[4]
+        deltaheight = last(fuckingheightlist)
+        println(deltaheight)
 
 
         println("here is the updated energy")
@@ -1041,12 +1045,14 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             println(newenergy)
             println("I did this many iterations:")
             println(iterations)
+            println("The height is:")
+            println(height)
         else
             oldenergy = newenergy
 
             #change the height
-            # height = height - learn_rate*cdeltat^2*deltaheight*olddeltaheight
-            # olddeltaheight = deltaheight
+            height = height - 20*cdeltat^2*deltaheight*abs(olddeltaheight)*learn_rate
+            olddeltaheight = deltaheight
         end
 
         iterations +=1
@@ -1055,6 +1061,8 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             converged = true
             println("We reached the max number of iterations!")
             println(newenergy)
+            println("The height is:")
+            println(height)
         end
 
     end
@@ -1071,8 +1079,8 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
     println("Here is the energy breakdown:")
 
     totalenergy(cpt1, cpt2, cpt3, height, width, true)
-    println("the height is:")
-    println(height)
+    # println("the height is:")
+    # println(height)
 
     return cpt1, cpt2, cpt3
 end
@@ -1084,13 +1092,13 @@ Where the code actually runs
 
 =#
 
-#grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
 
 
 # converged = true
 
-energy = totalenergy(xpoints, ypoints, zpoints, initialheight, width)
-println(energy[4])
+# energy = totalenergy(xpoints, ypoints, zpoints, initialheight, width)
+# println(energy[4])
 # println(energy[1])
 
 # comptest = compression(curve, dcurve, deltat, thebasis, dbasis, height, width)
