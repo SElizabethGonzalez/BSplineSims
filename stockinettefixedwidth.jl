@@ -488,7 +488,7 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                 # isolate the force in the y-direction to determine how to best change the height
                 ycoord = [0,1,0]
                 yforce = dot(rhat, ycoord)
-                yforce = forcemag * yforce
+                yforce = forcemag * yforce * normdr1 * normdr2
                 push!(forheight, yforce)
 
                 # direction of the force for down
@@ -558,7 +558,7 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
                 # isolate the force in the y-direction to determine how to best change the height
                 ycoord = [0,1,0]
                 yforce = dot(rhat, ycoord)
-                yforce = forcemag * yforce
+                yforce = forcemag * yforce * normdr1 * normdr2
                 push!(forheight, yforce)
 
                 # direction of the force for down
@@ -1038,7 +1038,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         #gradient ascent part for the length constraint
         lambda = lambda + (totallength(fordEbend,5) - targetlength)
 
-        if abs(oldenergy - newenergy) <= conv_threshold && iterations > 1000
+        if abs(oldenergy - newenergy) <= conv_threshold && iterations > 3500
             converged = true
             println("We converged!")
             println("here is the new energy")
@@ -1051,8 +1051,9 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             oldenergy = newenergy
 
             #change the height
-            height = height - 20*cdeltat^2*deltaheight*abs(olddeltaheight)*learn_rate
-            olddeltaheight = deltaheight
+            heightchange = 200000*cdeltat^2*deltaheight*abs(olddeltaheight)*learn_rate
+            height = height - heightchange
+            olddeltaheight = heightchange
         end
 
         iterations +=1
@@ -1092,7 +1093,7 @@ Where the code actually runs
 
 =#
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0007, 0.000000005, 100000)
 
 
 # converged = true
