@@ -939,6 +939,14 @@ function descent(listbend, listcomp, tmin, tmax, dimension, knot, lambda, length
 end
 
 
+function heightdescent(deltaheight, olddeltaheight, height, learn_rate)
+    #change the height
+    heightchange = 0.002*deltaheight #*abs(olddeltaheight) #cdeltat^2**learn_rate*200000
+    height = height - heightchange
+    olddeltaheight = heightchange
+    return height, olddeltaheight
+end
+
 # need to update/fix
 function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
@@ -953,9 +961,9 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     # println(oldenergy[4])
 
-    olddeltaheight = fuckingheightlist[1]
-    height = initialheight
-    println(olddeltaheight)
+    initialolddeltaheight = fuckingheightlist[1]
+    # height = initialheight
+    # println(olddeltaheight)
 
     oglength = totallength(fordEbend,5)
 
@@ -975,7 +983,23 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     while converged == false
 
+        if iterations == 0
+            cheight = heightdescent(initialolddeltaheight, initialolddeltaheight, initialheight, learn_rate)
+            global height = cheight[1]
+            global olddeltaheight = cheight[2]
+        else
+            cheight = heightdescent(deltaheight, olddeltaheight, height, learn_rate)
+            global height = cheight[1]
+            global olddeltaheight = cheight[2]
+        end
+
         length = totallength(fordEbend,5)
+
+        #computes the new energies and the new lists used to determine dE/dP_i after the height descent
+        newenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
+        fordEbend = newenergy[2]
+        fordEcomp = newenergy[3]
+        newenergy = newenergy[1]
 
         # control points for x-direction of curve
         # comment out the descent on the first control pt to fix the width
@@ -1022,14 +1046,15 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         cpt3 = [cpt301, cpt302, cpt303, cpt304, cpt305, cpt306, cpt307, cpt308, cpt309]
 
         #computes the new energies and the new lists used to determine dE/dP_i
+        # println("height")
+        # println(height)
         newenergy = totalenergy(cpt1, cpt2, cpt3, height, width)
         fordEbend = newenergy[2]
         fordEcomp = newenergy[3]
         newenergy = newenergy[1]
 
-        deltaheight = last(fuckingheightlist)
+        global deltaheight = last(fuckingheightlist)
         println(deltaheight)
-
 
         println("here is the updated energy")
         println(newenergy)
@@ -1038,7 +1063,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         #gradient ascent part for the length constraint
         lambda = lambda + (totallength(fordEbend,5) - targetlength)
 
-        if abs(oldenergy - newenergy) <= conv_threshold && iterations > 3500
+        if iterations > 3000 && abs(oldenergy - newenergy) <= conv_threshold
             converged = true
             println("We converged!")
             println("here is the new energy")
@@ -1049,11 +1074,6 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             println(height)
         else
             oldenergy = newenergy
-
-            #change the height
-            heightchange = 200000*cdeltat^2*deltaheight*abs(olddeltaheight)*learn_rate
-            height = height - heightchange
-            olddeltaheight = heightchange
         end
 
         iterations +=1
@@ -1065,6 +1085,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             println("The height is:")
             println(height)
         end
+        
 
     end
 
@@ -1093,7 +1114,7 @@ Where the code actually runs
 
 =#
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0007, 0.000000005, 100000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
 
 
 # converged = true
