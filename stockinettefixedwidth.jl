@@ -886,7 +886,7 @@ function totalenergy(cpt1, cpt2, cpt3, height, width)
     energy = contact[1] + bendinge[1]
     returnlist = [energy, bendinge[2], contact[2], fuckingheight]
 
-    println(returnlist[4])
+    #println(returnlist[4])
 
     return returnlist
 end
@@ -912,6 +912,7 @@ function totalenergy(cpt1, cpt2, cpt3, height, width, converged)
         println("total energy")
         println(2*energy)
     end
+    return 2*energy, 2*bendinge[1], 2*contact[1]
 end
 
 #=
@@ -941,14 +942,14 @@ end
 
 function heightdescent(deltaheight, olddeltaheight, height, learn_rate)
     #change the height
-    heightchange = 0.002*deltaheight #*abs(olddeltaheight) #cdeltat^2**learn_rate*200000
+    heightchange = 0.04*deltaheight #*abs(olddeltaheight) #cdeltat^2**learn_rate*200000
     height = height - heightchange
     olddeltaheight = heightchange
     return height, olddeltaheight
 end
 
 # need to update/fix
-function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
+function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter, filename)
 
     # fix the width of the stitch
     # cpt1 = fixwidth(cpt1, width)
@@ -1054,11 +1055,11 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
         newenergy = newenergy[1]
 
         global deltaheight = last(fuckingheightlist)
-        println(deltaheight)
+        #println(deltaheight)
 
-        println("here is the updated energy")
-        println(newenergy)
-        println(iterations)
+        # println("here is the updated energy")
+        # println(newenergy)
+        # println(iterations)
 
         #gradient ascent part for the length constraint
         lambda = lambda + (totallength(fordEbend,5) - targetlength)
@@ -1084,8 +1085,9 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
             println(newenergy)
             println("The height is:")
             println(height)
+            println("The width is:")
+            println(width)
         end
-        
 
     end
 
@@ -1100,9 +1102,26 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter)
 
     println("Here is the energy breakdown:")
 
-    totalenergy(cpt1, cpt2, cpt3, height, width, true)
+    forprinting = totalenergy(cpt1, cpt2, cpt3, height, width, true)
     # println("the height is:")
     # println(height)
+
+    println("FUCK YEAH LETS START A NEW ONE")
+    println("  ")
+    println("  ")
+    println("  ")
+    println("  ")
+
+    open(filename, "w") do file
+        println(file, forprinting[1])
+        println(file, forprinting[2])
+        println(file, forprinting[3])
+        println(file, width)
+        println(file, height)
+        println(file, cpt1)
+        println(file, cpt2)
+        println(file, cpt3)
+    end
 
     return cpt1, cpt2, cpt3
 end
@@ -1114,8 +1133,17 @@ Where the code actually runs
 
 =#
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000005, 100000)
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000001, 100000, "width268.txt")
 
+xpoints = grad[1]
+ypoints = grad[2]
+zpoints = grad[3]
+
+width = width + 0.05
+
+xpoints = fixwidth(xpoints, width/2)
+
+grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000001, 100000, "width273.txt")
 
 # converged = true
 
