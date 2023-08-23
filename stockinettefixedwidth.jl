@@ -639,7 +639,11 @@ function compression(curve, dcurve, thebasis, dbasis, height, width)
     # println(minimum(list))
 
     #println(sum(forheight))
-    changeheight = sum(forheight)
+    if length(forheight) == 0
+        changeheight = 0
+    else
+        changeheight = sum(forheight)
+    end
 
     return totcompeng, fordEcomp, changeheight
 end
@@ -1064,7 +1068,7 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter,
         #gradient ascent part for the length constraint
         lambda = lambda + (totallength(fordEbend,5) - targetlength)
 
-        if iterations > 3000 && abs(oldenergy - newenergy) <= conv_threshold
+        if iterations > 100 && abs(oldenergy - newenergy) <= conv_threshold
             converged = true
             println("We converged!")
             println("here is the new energy")
@@ -1121,9 +1125,10 @@ function gradientdescent(cpt1, cpt2, cpt3, learn_rate, conv_threshold, max_iter,
         println(file, cpt1)
         println(file, cpt2)
         println(file, cpt3)
+        println(file, iterations)
     end
 
-    return cpt1, cpt2, cpt3
+    return cpt1, cpt2, cpt3, forprinting[1]
 end
 
 
@@ -1133,18 +1138,34 @@ Where the code actually runs
 
 =#
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000001, 100000, "width268.txt")
+# grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000001, 100000, "width268.txt")
 
-xpoints = grad[1]
-ypoints = grad[2]
-zpoints = grad[3]
+# xpoints = grad[1]
+# ypoints = grad[2]
+# zpoints = grad[3]
 
-width = width + 0.05
+#xpoints = [-1.34, -1.1281587564783866, -0.5279182682520542, -0.1457249874194758, -0.6900916686798501, -1.2246331221331472, -0.8200072057416734, -0.2354205784460722, 0.0]
+#ypoints = [-0.7789921167482585, -0.7143911707532368, -0.5757581029129528, -0.023868386580874302, 0.9207215334320412, 1.8672433143476377, 2.4147625991657353, 2.538935864358883, 2.6080401045848354]
+#zpoints = [0.0, -0.04185077257294865, -0.12827005021427831, -0.7474056244668408, -1.152240992444435, -0.7386043037896876, -0.1230837948581271, -0.0033496528488928252, 0.06790679873360897]
 
-xpoints = fixwidth(xpoints, width/2)
 
-grad = gradientdescent(xpoints, ypoints, zpoints, 0.0005, 0.000000001, 100000, "width273.txt")
+#it = 0
 
+flag = true
+
+while width < 3.5 && flag == true
+    global width = width*1.001
+    global xpoints[1] = -width/2 #xpoints = fixwidth(xpoints, width/2)
+    println(xpoints)
+    #global zpoints = zpoints .* (1.005)
+    #global ypoints = ypoints .* (1.005)
+    global grad = gradientdescent(xpoints, ypoints, zpoints, 0.0001, 0.000000001, 100000, "width" * string(floor(Int,width*10000)) * ".txt")
+    #global ypoints = grad[2]
+    #global zpoints = grad[3]
+    if grad[4] < 0.1 || grad[4] > 5
+        global flag = false
+    end
+end
 # converged = true
 
 # energy = totalenergy(xpoints, ypoints, zpoints, initialheight, width)
