@@ -5,6 +5,8 @@
  Start Date: May 22 2023
  Last Updated: Jul 18 2023
 
+ NOTE AS OF 04/08/2025: The fixed height and fixed width julia files are my playground for each scenario and don't actually do what they promise in the name. Only stockinettefixed.jl actually runs as indicated in the title, with both dimensions fixed. You would need to accurately calculate the change in energy as the height/width changes to implement free boundaries. Additional issue: there is currently no constraint on the derivatives at the endpoints, which you should do to get accurate results. I completed testing without it, but only out of laziness. Realistically, the derivatives should be constrained to zero at the endpoints to make the entire fabric continuously differentiable.
+
  This code follows a similar framework to the static simulations published in [this paper](https://arxiv.org/abs/2302.13467). The stitch backbone is represented as a fifth order b-spline for C3 continuity and we consider an energy functional consisting of bending and compression potentials.
 
  Currently, the simulation follws one half of the stitch and minimizes the nergy functional using gradient descent to find the minimum energy stitch configuration.
